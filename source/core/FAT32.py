@@ -37,12 +37,8 @@ def getInfo(info):
     # First Sector of FAT   = SB
     print("First Sector of FAT: " + str(SB))
 
-    # First Sector of RDET = SB + NF * SF
-    SRDET = SB + NF * SF
-    print("First Sector of RDET: " + str(SRDET))
-
-    # First Data Sector = SB + NF * SF + SRDET
-    SDATA = SB + NF * SF + SRDET
+    # First Data Sector = SB + NF * SF
+    SDATA = SB + NF * SF
     print("First Sector of Data: " + str(SDATA))
 
 
@@ -53,6 +49,7 @@ disk = input("Choose a disk: ")
 path = "\\\\.\\" + disk + ":"
 
 if (os.path.exists(path)):
+    print("Chosen Disk: " + disk)
     file = open(path , "rb")
     info = file.read(200)
     getInfo(info)
