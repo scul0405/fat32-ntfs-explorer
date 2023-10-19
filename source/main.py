@@ -1,6 +1,5 @@
 # from [folder].[file.py] import [class]
 
-import time
 from core.NTFS import NTFS
 from core.FAT32 import FAT32
 # ntfs = NTFS("E")
