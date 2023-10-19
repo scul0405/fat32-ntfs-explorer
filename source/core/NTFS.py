@@ -1,7 +1,7 @@
-from base64 import decode
-import binascii
-
 from utils import open_windows_partition
+
+import sys
+import binascii
 
 
 class NTFS:
@@ -10,9 +10,21 @@ class NTFS:
         try:
             with open_windows_partition(drive_name) as drive:
                 self.raw_data = drive.read(512)
+                self.__extract_bpb__()
         except FileNotFoundError:
             print("Drive not found")
             exit(1)
+
+    def __extract_bpb__(self) -> dict:
+        self.boot_sector = {
+            "Bytes Per Sector": int.from_bytes(self.raw_data[0x0B:0x0D], byteorder=sys.byteorder),
+            "Sectors Per Cluster": int.from_bytes(self.raw_data[0x0D:0x0E], byteorder=sys.byteorder),
+            "Sectors Per track": int.from_bytes(self.raw_data[0x18:0x1A], byteorder=sys.byteorder),
+            "Number Of Heads": int.from_bytes(self.raw_data[0x1A:0x1C], byteorder=sys.byteorder),
+            "Total Sector": int.from_bytes(self.raw_data[0x28:0x30], byteorder=sys.byteorder),
+            "MFT Cluster": int.from_bytes(self.raw_data[0x30:0x38], byteorder=sys.byteorder),
+            "MFT Mirror Cluster": int.from_bytes(self.raw_data[0x38:0x40], byteorder=sys.byteorder),
+        }
 
     def print_raw_bpb(self) -> None:
         str_data = binascii.hexlify(self.raw_data).decode("utf-8")
