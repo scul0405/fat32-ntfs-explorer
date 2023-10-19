@@ -3,50 +3,6 @@ from base64 import decode
 import binascii
 from utils import open_windows_partition
 
-# def getInfo(info):
-
-#     # File System type  offset: 52h size: 8 bytes
-#     file_type = info[0x52:0x5A].decode('utf-8')
-#     print("FAT type: " + file_type)
-
-#     # Bytes per Sector  offset: Bh  size: 2 bytes
-#     BPS = int.from_bytes(info[0xB:0xD],'little')
-#     print("Bytes per Sector: " + str(BPS))
-
-#     # Sectors per Cluster   offset: Dh  size: 1 byte
-#     SC = int.from_bytes(info[0xD:0xE],'little')
-#     print("Sectors per Cluster: " + str(SC))
-
-#     # Reserved Sectors offset: Eh  size: 2 bytes
-#     SB = int.from_bytes(info[0xE:0x10],'little')
-#     print("Reserved Sectors: " + str(SB))
-
-#     # Copies of FAT  offset: 10h size: 1 byte
-#     NF = int.from_bytes(info[0x10:0x11],'little')
-#     print("Copies of FAT: " + str(NF))
-
-#     # Total Sectors  offset: 20h size: 4 bytes
-#     SV = int.from_bytes(info[0x20:0x24],'little')
-#     print("Total Sectors: " + str(SV))
-
-#     # FAT Size  offset: 24h size: 4 bytes
-#     SF = int.from_bytes(info[0x24:0x28],'little')
-#     print("FAT Size: " + str(SF))
-
-#     # First Cluster of RDET offset: 2C  size: 4 bytes
-#     FC = int.from_bytes(info[0x2C:0x30],'little')
-#     print("First Cluster of RDET: " + str(FC))
-
-#     # First Sector of FAT   = SB
-#     print("First Sector of FAT: " + str(SB))
-
-#     # First Data Sector = SB + NF * SF
-#     SDATA = SB + NF * SF
-#     print("First Sector of Data: " + str(SDATA))
-
-
-
-
 # disk = input("Choose a disk: ")
 
 # path = "\\\\.\\" + disk + ":"
@@ -61,16 +17,16 @@ from utils import open_windows_partition
 
 class FAT32:
     def __init__(self, drive_name: str) -> None:
-        self.raw_data = None
+        self.bootsector_data = None
         try:
             with open_windows_partition(drive_name) as drive:
-                self.raw_data = drive.read(0x200)
+                self.bootsector_data = drive.read(0x200)
             print('read success')    
         except FileNotFoundError:
             print("Drive not found")
             exit(1)
     def print_raw_bst(self) -> None:
-        str_data = binascii.hexlify(self.raw_data).decode("utf-8")
+        str_data = binascii.hexlify(self.bootsector_data).decode("utf-8")
 
         # Print header
         print("offset ", end=" ")
@@ -103,40 +59,40 @@ class FAT32:
 
     def print_bst_info(self):
         # File System type  offset: 52h size: 8 bytes
-        file_type = self.raw_data[0x52:0x5A].decode('utf-8')
-        print("FAT type: " + file_type)
+        self.file_type = self.bootsector_data[0x52:0x5A].decode('utf-8')
+        print("FAT type: " + self.file_type)
 
         # Bytes per Sector  offset: Bh  size: 2 bytes
-        BPS = int.from_bytes(self.raw_data[0xB:0xD],'little')
-        print("Bytes per Sector: " + str(BPS))
+        self.BPS = int.from_bytes(self.bootsector_data[0xB:0xD],'little')
+        print("Bytes per Sector: " + str(self.BPS))
 
         # Sectors per Cluster   offset: Dh  size: 1 byte
-        SC = int.from_bytes(self.raw_data[0xD:0xE],'little')
-        print("Sectors per Cluster: " + str(SC))
+        self.SC = int.from_bytes(self.bootsector_data[0xD:0xE],'little')
+        print("Sectors per Cluster: " + str(self.SC))
 
         # Reserved Sectors offset: Eh  size: 2 bytes
-        SB = int.from_bytes(self.raw_data[0xE:0x10],'little')
-        print("Reserved Sectors: " + str(SB))
+        self.SB = int.from_bytes(self.bootsector_data[0xE:0x10],'little')
+        print("Reserved Sectors: " + str(self.SB))
 
         # Copies of FAT  offset: 10h size: 1 byte
-        NF = int.from_bytes(self.raw_data[0x10:0x11],'little')
-        print("Copies of FAT: " + str(NF))
+        self.NF = int.from_bytes(self.bootsector_data[0x10:0x11],'little')
+        print("Copies of FAT: " + str(self.NF))
 
         # Total Sectors  offset: 20h size: 4 bytes
-        SV = int.from_bytes(self.raw_data[0x20:0x24],'little')
-        print("Total Sectors: " + str(SV))
+        self.SV = int.from_bytes(self.bootsector_data[0x20:0x24],'little')
+        print("Total Sectors: " + str(self.SV))
 
         # FAT Size  offset: 24h size: 4 bytes
-        SF = int.from_bytes(self.raw_data[0x24:0x28],'little')
-        print("FAT Size: " + str(SF))
+        self.SF = int.from_bytes(self.bootsector_data[0x24:0x28],'little')
+        print("FAT Size: " + str(self.SF))
 
         # First Cluster of RDET offset: 2C  size: 4 bytes
-        FC = int.from_bytes(self.raw_data[0x2C:0x30],'little')
-        print("First Cluster of RDET: " + str(FC))
+        self.FC = int.from_bytes(self.bootsector_data[0x2C:0x30],'little')
+        print("First Cluster of RDET: " + str(self.FC))
 
         # First Sector of FAT   = SB
-        print("First Sector of FAT: " + str(SB))
+        print("First Sector of FAT: " + str(self.SB))
 
         # First Data Sector = SB + NF * SF
-        SDATA = SB + NF * SF
-        print("First Sector of Data: " + str(SDATA))
+        self.SDATA = self.SB + self.NF * self.SF
+        print("First Sector of Data: " + str(self.SDATA))
