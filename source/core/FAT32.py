@@ -15,6 +15,21 @@ from utils import open_windows_partition
 # else:
 #     raise Exception()
 
+class FAT:
+  def __init__(self, data) -> None:
+    self.FAT_TABLE = []
+    for i in range(0, len(data), 4):
+      self.FAT_TABLE.append(int.from_bytes(data[i:i + 4], byteorder='little'))
+  
+  def get_cluster_chain(self, index: int) -> 'list[int]':
+    cluster_chain = []
+    while True:
+      cluster_chain.append(index)
+      index = self.FAT_TABLE[index]
+      if index == 0x0FFFFFFF or index == 0x0FFFFFF7:
+        break
+    return cluster_chain
+
 class FAT32:
     def __init__(self, drive_name: str) -> None:
         self.bootsector_data = None
@@ -25,6 +40,7 @@ class FAT32:
         except FileNotFoundError:
             print("Drive not found")
             exit(1)
+
     def print_raw_bst(self) -> None:
         str_data = binascii.hexlify(self.bootsector_data).decode("utf-8")
 
@@ -96,3 +112,7 @@ class FAT32:
         # First Data Sector = SB + NF * SF
         self.SDATA = self.SB + self.NF * self.SF
         print("First Sector of Data: " + str(self.SDATA))
+    
+    # From cluster index to sector index
+    def __cluster_to_sector(self, index):
+        return self.SB + self.SF * self.NF + (index - 2) * self.SC
