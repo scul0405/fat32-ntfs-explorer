@@ -113,5 +113,6 @@ class FAT32:
         self.SDATA = self.SB + self.NF * self.SF
         print("First Sector of Data: " + str(self.SDATA))
     
+    # From cluster index to sector index
     def __cluster_to_sector(self, index):
         return self.SB + self.SF * self.NF + (index - 2) * self.SC
