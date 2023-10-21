@@ -40,6 +40,7 @@ class FAT32:
         except FileNotFoundError:
             print("Drive not found")
             exit(1)
+
     def print_raw_bst(self) -> None:
         str_data = binascii.hexlify(self.bootsector_data).decode("utf-8")
 
@@ -111,3 +112,6 @@ class FAT32:
         # First Data Sector = SB + NF * SF
         self.SDATA = self.SB + self.NF * self.SF
         print("First Sector of Data: " + str(self.SDATA))
+    
+    def __cluster_to_sector(self, index):
+        return self.SB + self.SF * self.NF + (index - 2) * self.SC
