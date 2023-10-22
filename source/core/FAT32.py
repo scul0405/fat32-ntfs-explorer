@@ -1,5 +1,6 @@
-import os
+from enum import Flag, auto
 from base64 import decode
+from itertools import chain
 import binascii
 from utils import open_windows_partition
 
@@ -15,6 +16,16 @@ from utils import open_windows_partition
 # else:
 #     raise Exception()
 
+# TODO: refactor
+class Attribute(Flag):
+    READ_ONLY = auto()
+    HIDDEN = auto()
+    SYSTEM = auto()
+    VOLLABLE = auto()
+    DIRECTORY = auto()
+    ARCHIVE = auto()
+
+# DONE
 class FAT:
   def __init__(self, data) -> None:
     self.FAT_TABLE = []
@@ -29,6 +40,96 @@ class FAT:
       if index == 0x0FFFFFFF or index == 0x0FFFFFF7:
         break
     return cluster_chain
+
+# TODO: refactor
+class RDETentry:
+  def __init__(self, data) -> None:
+    self.raw_data = data
+    self.flag = data[0xB:0xC]
+    self.is_subentry: bool = False
+    self.is_deleted: bool = False
+    self.is_empty: bool = False
+    self.is_label: bool = False
+    self.attr = Attribute(0)
+    self.size = 0
+    
+    self.date_updated = 0
+    self.ext = b""
+    self.long_name = ""
+    if self.flag == b'\x0f':
+      self.is_subentry = True
+
+    if not self.is_subentry:
+      self.name = self.raw_data[:0x8]
+      self.ext = self.raw_data[0x8:0xB]
+      if self.name[:1] == b'\xe5':
+        self.is_deleted = True
+      if self.name[:1] == b'\x00':
+        self.is_empty = True
+        self.name = ""
+        return
+      
+      self.attr = Attribute(int.from_bytes(self.flag, byteorder='little'))
+      if Attribute.VOLLABLE in self.attr:
+        self.is_label = True
+        return
+
+      self.start_cluster = int.from_bytes(self.raw_data[0x14:0x16][::-1] + self.raw_data[0x1A:0x1C][::-1], byteorder='big') 
+      self.size = int.from_bytes(self.raw_data[0x1C:0x20], byteorder='little')
+
+    else:
+      self.index = self.raw_data[0]
+      self.name = b""
+      for i in chain(range(0x1, 0xB), range(0xE, 0x1A), range(0x1C, 0x20)):
+        self.name += int.to_bytes(self.raw_data[i], 1, byteorder='little')
+        if self.name.endswith(b"\xff\xff"):
+          self.name = self.name[:-2]
+          break
+      self.name = self.name.decode('utf-16le').strip('\x00')
+
+  def is_main_entry(self) -> bool:
+    return not (self.is_empty or self.is_subentry or self.is_deleted or self.is_label or Attribute.SYSTEM in self.attr)
+  
+  def is_directory(self) -> bool:
+    return Attribute.DIRECTORY in self.attr
+
+# PROCESSING
+class RDET:
+  def __init__(self, data: bytes) -> None:
+    self.entries: list[RDETentry] = []
+    long_name = ""
+    for i in range(0, len(data), 32):
+      self.entries.append(RDETentry(data[i: i + 32]))
+      # Read next entry and reset name if current entry is empty or deleted
+      if self.entries[-1].is_empty or self.entries[-1].is_deleted:
+        long_name = ""
+        continue
+      # If curr entry is sub entry, add curr entry's name to total name
+      if self.entries[-1].is_subentry:
+        long_name = self.entries[-1].name + long_name
+        continue
+      
+      #This stage is main entry
+      if long_name != "": #sumup all sub entry's name to main entry
+        self.entries[-1].long_name = long_name
+      else: #case file have only main entry
+        extend = self.entries[-1].ext.strip().decode() #get file extend
+        if extend == "": #is folder
+          self.entries[-1].long_name = self.entries[-1].name.strip().decode()
+        else: #is file
+          self.entries[-1].long_name = self.entries[-1].name.strip().decode() + "." + extend
+      #reset total name
+      long_name = "" 
+
+    # save all main entry of a det
+    self.list_main_entry: 'list[RDETentry]' = [entry for entry in self.entries if entry.is_main_entry()]
+
+  # find entry whose name match the given name
+  def find_entry(self, name) -> RDETentry:
+    for entry in self.list_main_entry:
+      if entry.long_name.lower() == name.lower():
+        return entry
+    return None
 
 class FAT32:
     def __init__(self, drive_name: str) -> None:
