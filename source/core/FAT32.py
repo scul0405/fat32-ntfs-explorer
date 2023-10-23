@@ -42,13 +42,28 @@ class FAT32:
     def __init__(self, drive_name: str) -> None:
         self.bootsector_data = None
         self.readed = 0
+        
+        try:
+            self.drive = open(r'\\.\%s:' % drive_name, 'rb')
+            print(f"Reading {drive_name}...")
+        except FileNotFoundError:
+            print(f"[ERROR] No volume named {drive_name}")
+            exit()
+        except PermissionError:
+            print("[ERROR] Permission denied, try again as admin/root")
+            exit()
+        except Exception as e:
+            print(e)
+            print("[ERROR] Unknown error occurred")
+            exit()
+
         try:
             with open_windows_partition(drive_name) as drive:
                 self.bootsector_data = drive.read(0x200)
 
             # File System type  offset: 52h size: 8 bytes
             self.file_type = self.bootsector_data[0x52:0x5A].decode('utf-8')
-
+            
             # Bytes per Sector  offset: Bh  size: 2 bytes
             self.BPS = int.from_bytes(self.bootsector_data[0xB:0xD],'little')
 
@@ -73,17 +88,17 @@ class FAT32:
             # First Data Sector = SB + NF * SF
             self.SDATA = self.SB + self.NF * self.SF
 
-            # Reserved data => Assign file drive for self.drive
-            # reserved_data_size = (self.SB - 1) * self.BPS
-            # self.reserved_data = self.drive.read(reserved_data_size)
+            # Reserved data
+            reserved_data_size = (self.SB - 1) * self.BPS
+            self.reserved_data = self.drive.read(reserved_data_size)
 
-            # # FAT data
-            # FAT_data_size = self.SF * self.NF * self.BPS
-            # self.FAT_data_raw = self.drive.read(FAT_data_size)
+            # FAT data
+            FAT_data_size = self.SF * self.NF * self.BPS
+            self.FAT_data_raw = self.drive.read(FAT_data_size)
 
-            # self.FAT_data = FAT(self.FAT_data_raw)
+            self.FAT_data = FAT(self.FAT_data_raw)
 
-            # self.RDET_data = drive.read(self.SC * self.BPS)
+            self.RDET_data = self.drive.read(self.SC * self.BPS)
 
             print('Read Success')    
         except FileNotFoundError:
