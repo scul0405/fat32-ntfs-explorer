@@ -45,50 +45,52 @@ class FAT32:
         try:
             with open_windows_partition(drive_name) as drive:
                 self.bootsector_data = drive.read(0x200)
+                self.get_bootsector_discription()
 
-            # File System type  offset: 52h size: 8 bytes
-            self.file_type = self.bootsector_data[0x52:0x5A].decode('utf-8')
+                # Reserved data
+                reserved_data_size = (self.SB - 1) * self.BPS
+                self.reserved_data = drive.read(reserved_data_size)
 
-            # Bytes per Sector  offset: Bh  size: 2 bytes
-            self.BPS = int.from_bytes(self.bootsector_data[0xB:0xD],'little')
+                # FAT data
+                FAT_data_size = self.SF * self.NF * self.BPS
+                self.FAT_data_raw = drive.read(FAT_data_size)
 
-            # Sectors per Cluster   offset: Dh  size: 1 byte
-            self.SC = int.from_bytes(self.bootsector_data[0xD:0xE],'little')
+                self.FAT_data = FAT(self.FAT_data_raw)
 
-            # Reserved Sectors offset: Eh  size: 2 bytes
-            self.SB = int.from_bytes(self.bootsector_data[0xE:0x10],'little')
-
-            # Copies of FAT  offset: 10h size: 1 byte
-            self.NF = int.from_bytes(self.bootsector_data[0x10:0x11],'little')
-
-            # Total Sectors  offset: 20h size: 4 bytes
-            self.SV = int.from_bytes(self.bootsector_data[0x20:0x24],'little')
-
-            # FAT Size  offset: 24h size: 4 bytes
-            self.SF = int.from_bytes(self.bootsector_data[0x24:0x28],'little')
-
-            # First Cluster of RDET offset: 2C  size: 4 bytes
-            self.FC = int.from_bytes(self.bootsector_data[0x2C:0x30],'little')
-
-            # First Data Sector = SB + NF * SF
-            self.SDATA = self.SB + self.NF * self.SF
-
-            # Reserved data
-            reserved_data_size = (self.SB - 1) * self.BPS
-            self.reserved_data = drive.read(reserved_data_size)
-
-            # FAT data
-            FAT_data_size = self.SF * self.NF * self.BPS
-            self.FAT_data_raw = drive.read(FAT_data_size)
-
-            self.FAT_data = FAT(self.FAT_data_raw)
-
-            self.RDET_data = drive.read(self.SC * self.BPS)
+                self.RDET_data = drive.read(self.SC * self.BPS)
 
             print('Read Success')    
         except FileNotFoundError:
             print("Drive Not Found")
             exit(1)
+
+    def get_bootsector_discription(self):
+        # File System type  offset: 52h size: 8 bytes
+        self.file_type = self.bootsector_data[0x52:0x5A].decode('utf-8')
+
+        # Bytes per Sector  offset: Bh  size: 2 bytes
+        self.BPS = int.from_bytes(self.bootsector_data[0xB:0xD],'little')
+
+        # Sectors per Cluster   offset: Dh  size: 1 byte
+        self.SC = int.from_bytes(self.bootsector_data[0xD:0xE],'little')
+
+        # Reserved Sectors offset: Eh  size: 2 bytes
+        self.SB = int.from_bytes(self.bootsector_data[0xE:0x10],'little')
+
+        # Copies of FAT  offset: 10h size: 1 byte
+        self.NF = int.from_bytes(self.bootsector_data[0x10:0x11],'little')
+
+        # Total Sectors  offset: 20h size: 4 bytes
+        self.SV = int.from_bytes(self.bootsector_data[0x20:0x24],'little')
+
+        # FAT Size  offset: 24h size: 4 bytes
+        self.SF = int.from_bytes(self.bootsector_data[0x24:0x28],'little')
+
+        # First Cluster of RDET offset: 2C  size: 4 bytes
+        self.FC = int.from_bytes(self.bootsector_data[0x2C:0x30],'little')
+
+        # First Data Sector = SB + NF * SF
+        self.SDATA = self.SB + self.NF * self.SF
 
     def print_raw_bst(self) -> None:
         str_data = binascii.hexlify(self.bootsector_data).decode("utf-8")
