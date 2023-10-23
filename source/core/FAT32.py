@@ -73,17 +73,17 @@ class FAT32:
             # First Data Sector = SB + NF * SF
             self.SDATA = self.SB + self.NF * self.SF
 
-            # Reserved data
-            reserved_data_size = (self.SB - 1) * self.BPS
-            self.reserved_data = drive.read(reserved_data_size)
+            # Reserved data => Assign file drive for self.drive
+            # reserved_data_size = (self.SB - 1) * self.BPS
+            # self.reserved_data = self.drive.read(reserved_data_size)
 
-            # FAT data
-            FAT_data_size = self.SF * self.NF * self.BPS
-            self.FAT_data_raw = drive.read(FAT_data_size)
+            # # FAT data
+            # FAT_data_size = self.SF * self.NF * self.BPS
+            # self.FAT_data_raw = self.drive.read(FAT_data_size)
 
-            self.FAT_data = FAT(self.FAT_data_raw)
+            # self.FAT_data = FAT(self.FAT_data_raw)
 
-            self.RDET_data = drive.read(self.SC * self.BPS)
+            # self.RDET_data = drive.read(self.SC * self.BPS)
 
             print('Read Success')    
         except FileNotFoundError:
