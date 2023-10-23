@@ -1,5 +1,6 @@
-import os
+from enum import Flag, auto
 from base64 import decode
+from itertools import chain
 import binascii
 from utils import open_windows_partition
 
