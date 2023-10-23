@@ -14,7 +14,7 @@ for i in range(0, 16):
     try:
         ntfs.__extract_mft__()
     except Exception as e:
-        print(i, e)
+        pass
 # fat32 = FAT32("F")
 # fat32.print_raw_bst()
 # fat32.print_bst_info()

@@ -101,31 +101,42 @@ class NTFS:
         self.mft_entry_raw_data = self.drive.read(16)
         self.mft_attribute_header = self.__extract_mft_header__()
 
+        # chỉ lấy file name nên ignore hết các attribute khác
         while True:
-            if self.mft_attribute_header["Attribute name"] == "$FILE_NAME":
-                print(self.current_offset, self.mft_attribute_header)
-                break
-
             self.current_offset += self.mft_attribute_header["Attribute length"]
             self.drive.seek(self.current_offset)
+
             self.mft_entry_raw_data = self.drive.read(16)
             self.mft_attribute_header = self.__extract_mft_header__()
 
+            if (self.mft_attribute_header["Attribute type"] == MFT_ATTRIBUTE_TYPE["$FILE_NAME"]):
+                break
+
         if self.mft_attribute_header["Flag"] == "Resident":
-            self.current_offset += self.mft_attribute_header["Start of MFT Entry"]
+            self.current_offset += 16
             self.drive.seek(self.current_offset)
-            self.mft_entry_raw_data = self.drive.read(
-                self.mft_attribute_header["Attribute length"] - self.mft_attribute_header["Start of MFT Entry"])
-
-            NAMEINFO = {
-                "NAME_SIZE": int.from_bytes(self.mft_entry_raw_data[0:4], byteorder=sys.byteorder),
-                "NAME_OFFSET": int.from_bytes(self.mft_entry_raw_data[4:6], byteorder=sys.byteorder),
+            self.mft_entry_raw_data = self.drive.read(6)
+            self.mft_entry_data = {
+                "SIZE OF CONTENT": int.from_bytes(self.mft_entry_raw_data[0:4], byteorder=sys.byteorder),
+                "OFFSET TO CONTENT": int.from_bytes(self.mft_entry_raw_data[4:6], byteorder=sys.byteorder),
             }
-            print(NAMEINFO)
-            print(self.mft_entry_raw_data.decode("utf-16", errors="ignore"))
 
+            # không hiểu số 66 từ đâu ra nhưng thêm vào thì nó chạy đúng
+            self.mft_entry_data["SIZE OF NAME"] = int((
+                self.mft_entry_data["SIZE OF CONTENT"] - 66) / 2)
+
+            self.current_offset += self.mft_entry_data["OFFSET TO CONTENT"] + 0x32
+            self.drive.seek(self.current_offset)
+
+            self.mft_entry_raw_data = self.drive.read(
+                self.mft_entry_data["SIZE OF NAME"] * 2)
+
+            self.mft_entry_data["FILE NAME"] = self.mft_entry_raw_data.decode(
+                "utf-16")
+            print("[FILE NAME]", self.mft_entry_data)
         else:
             print("Non-resident")
+        print()
 
         self.current_mft_index_entry += 1
 
@@ -135,7 +146,7 @@ class NTFS:
             "Attribute length": int.from_bytes(self.mft_entry_raw_data[4:8], byteorder=sys.byteorder),
             "Flag": "Resident" if int.from_bytes(self.mft_entry_raw_data[8:9], byteorder=sys.byteorder) == 0 else "Non-resident",
             "Name size": int.from_bytes(self.mft_entry_raw_data[9:10], byteorder=sys.byteorder),
-            "Start of MFT Entry": int.from_bytes(self.mft_entry_raw_data[10:12], byteorder=sys.byteorder),
+            "Offset to name": int.from_bytes(self.mft_entry_raw_data[10:12], byteorder=sys.byteorder),
             "Attribute data flags": self.__get_attribute_data_flag__(int.from_bytes(self.mft_entry_raw_data[12:14], byteorder=sys.byteorder)),
             "Attribute name": self.__get_attribute_type__(int.from_bytes(self.mft_entry_raw_data[0:4], byteorder=sys.byteorder)),
         }
@@ -159,6 +170,40 @@ class NTFS:
             if entry_flags & value != 0:
                 flags += key + " "
         return flags
+
+    # for debug
+
+    def print_raw_mft(self, data) -> None:
+        str_data = binascii.hexlify(data).decode("utf-8")
+
+        # Print header
+        print("offset ", end=" ")
+        for i in range(0, 16):
+            print("{:2x}".format(i), end=' ')
+        print()
+
+        # print 16 byte each line
+        for i in range(0, len(str_data), 32):
+            line = str_data[i:i+32]
+
+            # print offset
+            offset = int(i / 32)
+            print("{:07x}0".format(offset), end=" ")
+
+            # print hex
+            for j in range(0, len(line), 2):
+                print(line[j:j+2], end=' ')
+
+            # print ascii
+            for j in range(0, len(line), 2):
+                char = line[j:j+2]
+                # ignore \r \n
+
+                if int(char, 16) >= 32 and int(char, 16) <= 126:
+                    print(chr(int(char, 16)), end='')
+                else:
+                    print(".", end='')
+            print()
 
     def print_raw_bpb(self) -> None:
         str_data = binascii.hexlify(self.raw_data[0:BPS_SIZE]).decode("utf-8")
