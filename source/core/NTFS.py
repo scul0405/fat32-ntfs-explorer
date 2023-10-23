@@ -1,5 +1,4 @@
 from utils import open_windows_partition
-from enum import Enum
 
 import sys
 import binascii
