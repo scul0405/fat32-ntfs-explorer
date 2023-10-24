@@ -12,5 +12,6 @@ from core.FAT32 import FAT32
 #     ntfs.extract_mft()
 
 fat32 = FAT32("E")
-fat32.print_table_offset(fat32.RDET_data)
-fat32.print_bst_info()
+#fat32.print_table_offset(fat32.RDET_data_raw)
+#print(fat32.FAT_data.get_cluster_chain(6))
+#fat32.print_bst_info()
