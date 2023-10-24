@@ -7,6 +7,7 @@ from utils import open_windows_partition
 class FAT:
   def __init__(self, data) -> None:
     self.FAT_TABLE = []
+
     for i in range(0, len(data), 4):
       self.FAT_TABLE.append(int.from_bytes(data[i:i + 4], byteorder='little'))
   
@@ -15,37 +16,39 @@ class FAT:
     while True:
       cluster_chain.append(index)
       index = self.FAT_TABLE[index]
+
       if index == 0x0FFFFFFF or index == 0x0FFFFFF7:
         break
+      
     return cluster_chain
     
 class File:
     def __init__(self, data) -> None:
-        mainEntry = len(data) - 1
-        self.is_folder = (int.from_bytes(data[mainEntry][0xB:0xC]) == 0x10)
         self.storage = []
-        self.file_content = ""
+        self.raw_data = b''
         self.get_file_info(data)
 
     def get_file_info(self, data):
         self.filename = ""
+
         for i in range(len(data)):
            # is main entry (last loop)
            if(i == len(data) - 1):
-               
+                
                 if(len(data) == 1):
-                    self.main_filename = data[i][0x0:0x8].decode('utf-8')
+                    self.filename = data[i][0x0:0x8].decode('utf-8')
 
-                self.extension =data[i][0x8:0xB].decode('utf-8')
+                self.extension = data[i][0x8:0xB].decode('utf-8')
+                self.is_folder = (self.extension == '   ')
                 self.start_cluster = int.from_bytes(data[i][0x1A:0x1C], 'little')
+                self.size = int.from_bytes(data[i][0x1C:0x20], 'little')
            # is sub entry
            else:
                 temp = data[i][0x1:0xB].decode('utf-16') + data[i][0xE:0x1A].decode('utf-16') + data[i][0x1C:0x20].decode('utf-16')
-                self.filename = self.filename + temp
+                self.filename = temp + self.filename
 
         end_filename = self.filename.find('\x00')
         self.filename = self.filename[:end_filename]
-        print(self.filename + "." + self.extension + "\t" + str(self.start_cluster))
     
 
 
@@ -86,8 +89,7 @@ class FAT32:
             self.RDET_data_raw = self.drive.read(self.SC * self.BPS)
 
             # get list file
-            self.get_all_files_in_RDET()
-
+            self.list_File = self.get_all_files(self.RDET_data_raw)
 
             print('Read Success')    
         except FileNotFoundError:
@@ -127,6 +129,7 @@ class FAT32:
 
         # Print header
         print("offset ", end=" ")
+
         for i in range(0, 16):
             print("{:2x}".format(i), end=' ')
         print()
@@ -171,16 +174,17 @@ class FAT32:
 
         print("First Cluster of RDET: " + str(self.FC))
 
-        # First Sector of FAT   = SB
+        # First Sector of FAT = SB
         print("First Sector of FAT: " + str(self.SB))
 
         print("First Sector of Data: " + str(self.SDATA))
     
-    def get_all_files_in_RDET(self):
+    def get_all_files(self, entries_data):
         list_Entry = []
-        self.list_File = []
-        for i in range(0, len(self.RDET_data_raw), 32):
-            new_entry = self.RDET_data_raw[i : i + 32]
+        list_File = []
+
+        for i in range(0, len(entries_data), 32):
+            new_entry = entries_data[i : i + 32]
 
             if(int.from_bytes(new_entry[0xB:0xC]) == 0x0):
                 break
@@ -188,13 +192,50 @@ class FAT32:
             list_Entry.append(new_entry)
 
             if(int.from_bytes(new_entry[0xB:0xC]) != 0x0f):
-                self.list_File.append(File(list_Entry))
+                list_File.append(File(list_Entry))
                 list_Entry = []
 
-    # def get_file_content(self, file: File):
-    #     chain = self.FAT_data.get_cluster_chain(file.start_cluster)
-    #     for i in chain:
+        for i in list_File:
+            
+            if(i.start_cluster >= 2):
+                if(i.is_folder):
+                    self.get_folder_content(i)
+                else:
+                    self.get_file_content(i)
 
+        return list_File
+
+    def get_file_content(self, file: File):
+        print(file.filename + '.' + file.extension)
+        chain = self.FAT_data.get_cluster_chain(file.start_cluster)
+        size_remaining = file.size
+
+        for i in chain:
+
+            if(size_remaining <= 0):
+                break
+
+            pos = self.cluster_to_sector(i) * self.BPS
+            self.drive.seek(pos)
+            byte_per_cluster = self.SC * self.BPS
+            read_data = self.drive.read(max(size_remaining , byte_per_cluster))
+            file.raw_data = file.raw_data + read_data
+            size_remaining = size_remaining - byte_per_cluster
+    
+    def get_folder_content(self, folder: File):
+        print(folder.filename)
+        chain = self.FAT_data.get_cluster_chain(folder.start_cluster)
+
+        for i in chain:
+
+            pos = self.cluster_to_sector(i) * self.BPS
+            self.drive.seek(pos)
+            byte_per_cluster = self.SC * self.BPS
+            read_data = self.drive.read(byte_per_cluster)
+            folder.raw_data = folder.raw_data + read_data
+        
+        folder.raw_data = folder.raw_data[64:]
+        folder.storage = self.get_all_files(folder.raw_data)          
     
     # From cluster index to sector index
     def cluster_to_sector(self, index):
