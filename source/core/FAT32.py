@@ -42,22 +42,37 @@ class FAT32:
     def __init__(self, drive_name: str) -> None:
         self.bootsector_data = None
         self.readed = 0
+        
+        try:
+            self.drive = open(r'\\.\%s:' % drive_name, 'rb')
+            print(f"Reading {drive_name}...")
+        except FileNotFoundError:
+            print(f"[ERROR] No volume named {drive_name}")
+            exit()
+        except PermissionError:
+            print("[ERROR] Permission denied, try again as admin/root")
+            exit()
+        except Exception as e:
+            print(e)
+            print("[ERROR] Unknown error occurred")
+            exit()
+
         try:
             with open_windows_partition(drive_name) as drive:
                 self.bootsector_data = drive.read(0x200)
                 self.get_bootsector_discription()
+            
+            # Reserved data
+            reserved_data_size = self.SB * self.BPS
+            self.reserved_data = self.drive.read(reserved_data_size)
 
-                # Reserved data
-                reserved_data_size = (self.SB - 1) * self.BPS
-                self.reserved_data = drive.read(reserved_data_size)
+            # FAT data
+            FAT_data_size = self.SF * self.NF * self.BPS
+            self.FAT_data_raw = self.drive.read(FAT_data_size)
 
-                # FAT data
-                FAT_data_size = self.SF * self.NF * self.BPS
-                self.FAT_data_raw = drive.read(FAT_data_size)
+            self.FAT_data = FAT(self.FAT_data_raw)
 
-                self.FAT_data = FAT(self.FAT_data_raw)
-
-                self.RDET_data = drive.read(self.SC * self.BPS)
+            self.RDET_data = self.drive.read(self.SC * self.BPS)
 
             print('Read Success')    
         except FileNotFoundError:
@@ -92,8 +107,8 @@ class FAT32:
         # First Data Sector = SB + NF * SF
         self.SDATA = self.SB + self.NF * self.SF
 
-    def print_raw_bst(self) -> None:
-        str_data = binascii.hexlify(self.bootsector_data).decode("utf-8")
+    def print_table_offset(self, data) -> None:
+        str_data = binascii.hexlify(data).decode("utf-8")
 
         # Print header
         print("offset ", end=" ")
