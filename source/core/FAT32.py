@@ -87,7 +87,7 @@ class Entry:
     def is_directory(self) -> bool:
         return Attribute.DIRECTORY in self.attr
 
-class DET:
+class RDET:
   def __init__(self, data: bytes) -> None:
     self.entries: list[Entry] = []
     total_name = ""
@@ -150,7 +150,8 @@ class File:
 
                 self.extension = data[i][0x8:0xB].decode('utf-8')
                 self.is_folder = (self.extension == '   ')
-                self.start_cluster = int.from_bytes(data[i][0x1A:0x1C], 'little')
+                # self.start_cluster = int.from_bytes(data[i][0x1A:0x1C], 'little')
+                self.start_cluster = int.from_bytes(data[0x14:0x16][::-1] + data[0x1A:0x1C][::-1], byteorder='big')
                 self.size = int.from_bytes(data[i][0x1C:0x20], 'little')
            # is sub entry
            else:
@@ -296,12 +297,12 @@ class FAT32:
         for i in range(0, len(entries_data), 32):
             new_entry = entries_data[i : i + 32]
 
-            if(int.from_bytes(new_entry[0xB:0xC]) == 0x0):
+            if(int.from_bytes(new_entry[0xB:0xC],'little') == 0x0):
                 break
 
             list_Entry.append(new_entry)
 
-            if(int.from_bytes(new_entry[0xB:0xC]) != 0x0f):
+            if(int.from_bytes(new_entry[0xB:0xC],'little') != 0x0f):
                 list_File.append(File(list_Entry))
                 list_Entry = []
 
