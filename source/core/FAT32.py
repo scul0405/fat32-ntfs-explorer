@@ -4,6 +4,14 @@ from itertools import chain
 import binascii
 from utils import open_windows_partition
 
+class Attribute(Flag):
+    READ_ONLY = auto()
+    HIDDEN = auto()
+    SYSTEM = auto()
+    VOLLABLE = auto()
+    DIRECTORY = auto()
+    ARCHIVE = auto()
+
 class FAT:
   def __init__(self, data) -> None:
     self.FAT_TABLE = []
@@ -21,6 +29,108 @@ class FAT:
         break
       
     return cluster_chain
+  
+class Entry:
+    def __init__(self, data) -> None:
+        self.raw_data = data
+        self.flag = data[0xB:0xC]
+        self.is_subentry = False
+        self.is_deleted = False
+        self.is_empty = False
+        self.is_label = False
+        self.date_updated = 0
+        self.attr = Attribute(0)
+        self.size = 0
+        self.total_name = ""
+        self.parse_entry(data)
+
+    # Parse the entry data
+    def parse_entry(self, data):
+        if self.flag == b'\x0f':
+            self.is_subentry = True
+        if not self.is_subentry:
+            self.parse_main_entry(data)
+        else:
+            self.parse_subentry(data)
+
+    # Parse the main entry
+    def parse_main_entry(self, data):
+        self.name = data[:0x8] 
+        self.ext = data[0x8:0xB]
+        if self.name[:1] == b'\xe5':
+            self.is_deleted = True
+        if self.name[:1] == b'\x00':
+            self.is_empty = True
+            self.name = ""
+            return
+
+        self.attr = Attribute(int.from_bytes(self.flag, byteorder='little'))
+        if Attribute.VOLLABLE in self.attr:
+            self.is_label = True
+            return
+
+        self.start_cluster = int.from_bytes(data[0x14:0x16][::-1] + data[0x1A:0x1C][::-1], byteorder='big')
+        self.size = int.from_bytes(data[0x1C:0x20], byteorder='little')
+
+    def parse_subentry(self, data):
+        self.name = b""
+        for i in chain(range(0x1, 0xB), range(0xE, 0x1A), range(0x1C, 0x20)):
+            self.name += int.to_bytes(data[i], 1, byteorder='little')
+            if self.name.endswith(b"\xff\xff"):
+                self.name = self.name[:-2]
+                break
+        self.name = self.name.decode('utf-16le').strip('\x00')
+
+    def is_main_entry(self) -> bool:
+        return not (self.is_empty or self.is_subentry or self.is_deleted or self.is_label or Attribute.SYSTEM in self.attr)
+
+    def is_directory(self) -> bool:
+        return Attribute.DIRECTORY in self.attr
+
+class DET:
+  def __init__(self, data: bytes) -> None:
+    self.entries: list[Entry] = []
+    total_name = ""
+
+    for i in range(0, len(data), 32):
+        entry = Entry(data[i: i + 32])
+        self.entries.append(entry)
+
+        # Check if the current entry is empty or deleted
+        if entry.is_empty or entry.is_deleted:
+            total_name = ""
+            continue
+
+        # If the current entry is a subentry, add its name to the total name
+        if entry.is_subentry:
+            total_name = entry.name + total_name
+            continue
+
+        # This stage is the main entry
+        if total_name != "":
+            # Sum up all subentry names to the main entry
+            entry.total_name = total_name
+        else:
+            extend = entry.ext.strip().decode()
+            if extend == "":
+                # It's a folder
+                entry.total_name = entry.name.strip().decode()
+            else:
+                # It's a file
+                entry.total_name = entry.name.strip().decode() + "." + extend
+
+        # Reset the total name
+        total_name = ""
+
+    # Save all main entries of a det
+    self.list_main_entry: 'list[Entry]' = [entry for entry in self.entries if entry.is_main_entry()]
+
+  # find entry whose name match the given name
+  def find_entry(self, name) -> Entry:
+    for entry in self.list_main_entry:
+      if entry.total_name.lower() == name.lower():
+        return entry
+    return None
     
 class File:
     def __init__(self, data) -> None:
