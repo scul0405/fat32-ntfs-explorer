@@ -2,6 +2,7 @@ from utils import open_windows_partition
 
 import sys
 import binascii
+import time
 
 # Constants
 BPS_SIZE = 512
@@ -17,14 +18,22 @@ MFT_ENTRY_FLAGS = {
     "MFT_RECORD_IS_VIEW_INDEX": 8
 }
 
-MFT_ATTRIBUTE_DATA_FLAGS = {
-    "MFT_ATTRIBUTE_IS_COMPRESSED": 1,
-    "MFT_ATTRIBUTE_COMPRESSION_MASK": 2,
-    "MFT_ATTRIBUTE_IS_ENCRYPTED": 4,
-    "MFT_ATTRIBUTE_IS_SPARSE": 8,
-    "MFT_ATTRIBUTE_IS_REPARSE_POINT": 16,
-    "MFT_ATTRIBUTE_IS_METADATA": 32,
-    "MFT_ATTRIBUTE_MASK": 63
+FILE_ATTRIBUTE_FLAGS = {
+    "READ_ONLY": 0x00000001,
+    "HIDDEN": 0x00000002,
+    "SYSTEM": 0x00000004,
+    "ARCHIVE": 0x00000020,
+    "DEVICE": 0x00000040,
+    "NORMAL": 0x00000080,
+    "TEMPORARY": 0x00000100,
+    "SPARSE_FILE": 0x00000200,
+    "REPARSE_POINT": 0x00000400,
+    "COMPRESSED": 0x00000800,
+    "OFFLINE": 0x00001000,
+    "NOT_CONTENT_INDEXED": 0x00002000,
+    "ENCRYPTED": 0x00004000,
+    "DIRECTORY": 0x10000000,
+    "INDEX_VIEW": 0x20000000
 }
 
 MFT_ATTRIBUTE_TYPE = {
@@ -79,13 +88,20 @@ class NTFS:
         return self.boot_sector
 
     def __extract_mft__(self) -> dict:
+
         self.current_offset = self.boot_sector["MFT Cluster"] * self.boot_sector["Sectors Per Cluster"] * \
             self.boot_sector["Bytes Per Sector"] + \
             self.current_mft_index_entry * MFT_ENTRY_SIZE
         self.drive.seek(self.current_offset)
 
+        # READ FIRST MFT ENTRY
         self.mft_entry_raw_data = self.drive.read(MFT_ENTRY_SIZE)
-        self.mft_entry_data = {
+
+        # debug
+        self.print_raw_mft(self.mft_entry_raw_data)
+        # end debug
+
+        self.mft_entry_header = {
             "Signature": self.mft_entry_raw_data[0x0:0x4].decode("utf-8"),
             "Sequence Number": int.from_bytes(self.mft_entry_raw_data[0x4:0x6], byteorder=sys.byteorder),
             "Reference Count": int.from_bytes(self.mft_entry_raw_data[0x6:0x8], byteorder=sys.byteorder),
@@ -96,60 +112,67 @@ class NTFS:
             "Base reference": int.from_bytes(self.mft_entry_raw_data[0x20:0x28], byteorder=sys.byteorder),
         }
 
-        self.current_offset += self.mft_entry_data["Offset to the first attribute"]
+        if self.mft_entry_header["Signature"] != "FILE":
+            self.current_mft_index_entry += 1
+            return
+
+        # debug
+        print("[MFT ENTRY]", self.mft_entry_header)
+
+        # ATTRIBUTE THỨ NHẤT - STANDARD INFORMATION
+        self.current_offset += self.mft_entry_header["Offset to the first attribute"]
         self.drive.seek(self.current_offset)
         self.mft_entry_raw_data = self.drive.read(16)
         self.mft_attribute_header = self.__extract_mft_header__()
+        print("[STANDARD INFORMATION]", self.mft_attribute_header)
 
-        # chỉ lấy file name nên ignore hết các attribute khác
-        while True:
-            self.current_offset += self.mft_attribute_header["Attribute length"]
-            self.drive.seek(self.current_offset)
-
-            self.mft_entry_raw_data = self.drive.read(16)
-            self.mft_attribute_header = self.__extract_mft_header__()
-
-            if (self.mft_attribute_header["Attribute type"] == MFT_ATTRIBUTE_TYPE["$FILE_NAME"]):
-                break
+        # ATTRIBUTE THỨ HAI - FILE NAME
+        self.current_offset += self.mft_attribute_header["Attribute length"]
+        self.drive.seek(self.current_offset)
+        self.mft_entry_raw_data = self.drive.read(16)
+        self.mft_attribute_header = self.__extract_mft_header__()
+        print("[FILE NAME HEADER]", self.mft_attribute_header)
 
         if self.mft_attribute_header["Flag"] == "Resident":
             self.current_offset += 16
             self.drive.seek(self.current_offset)
+
             self.mft_entry_raw_data = self.drive.read(6)
             self.mft_entry_data = {
                 "SIZE OF CONTENT": int.from_bytes(self.mft_entry_raw_data[0:4], byteorder=sys.byteorder),
                 "OFFSET TO CONTENT": int.from_bytes(self.mft_entry_raw_data[4:6], byteorder=sys.byteorder),
             }
 
-            # không hiểu số 66 từ đâu ra nhưng thêm vào thì nó chạy đúng
-            self.mft_entry_data["SIZE OF NAME"] = int((
-                self.mft_entry_data["SIZE OF CONTENT"] - 66) / 2)
-
-            self.current_offset += self.mft_entry_data["OFFSET TO CONTENT"] + 0x32
+            self.current_offset += self.mft_entry_data["OFFSET TO CONTENT"] - 16
             self.drive.seek(self.current_offset)
 
-            self.mft_entry_raw_data = self.drive.read(
-                self.mft_entry_data["SIZE OF NAME"] * 2)
+            body = self.drive.read(self.mft_entry_data["SIZE OF CONTENT"])
 
-            self.mft_entry_data["FILE NAME"] = self.mft_entry_raw_data.decode(
-                "utf-16")
+            self.mft_entry_data = {
+                "PARENT ID": int.from_bytes(body[0:6], byteorder=sys.byteorder),
+                "NAME LENGTH": body[64],
+                # không hiểu số 66 từ đâu ra nhưng thêm vào thì nó chạy đúng
+                "FILE NAME": body[66:66 + body[64] * 2].decode("utf-16"),
+            }
+
             print("[FILE NAME]", self.mft_entry_data)
         else:
             print("Non-resident")
         print()
-
+        # debug
+        time.sleep(2)
         self.current_mft_index_entry += 1
 
     def __extract_mft_header__(self) -> dict:
-        return {
+        header = {
             "Attribute type": int.from_bytes(self.mft_entry_raw_data[0:4], byteorder=sys.byteorder),
             "Attribute length": int.from_bytes(self.mft_entry_raw_data[4:8], byteorder=sys.byteorder),
             "Flag": "Resident" if int.from_bytes(self.mft_entry_raw_data[8:9], byteorder=sys.byteorder) == 0 else "Non-resident",
             "Name size": int.from_bytes(self.mft_entry_raw_data[9:10], byteorder=sys.byteorder),
             "Offset to name": int.from_bytes(self.mft_entry_raw_data[10:12], byteorder=sys.byteorder),
-            "Attribute data flags": self.__get_attribute_data_flag__(int.from_bytes(self.mft_entry_raw_data[12:14], byteorder=sys.byteorder)),
             "Attribute name": self.__get_attribute_type__(int.from_bytes(self.mft_entry_raw_data[0:4], byteorder=sys.byteorder)),
         }
+        return header
 
     def __get_attribute_type__(self, attribute_type: int) -> str:
         for key, value in MFT_ATTRIBUTE_TYPE.items():
@@ -157,20 +180,18 @@ class NTFS:
                 return key
         return "Unknown"
 
-    def __get_attribute_data_flag__(self, attribute_data_flag: int) -> str:
-        flags = ""
-        for key, value in MFT_ATTRIBUTE_DATA_FLAGS.items():
-            if attribute_data_flag & value != 0:
-                flags += key + " "
-        return flags
-
     def __get_entry_flags__(self, entry_flags: int) -> str:
-        flags = ""
         for key, value in MFT_ENTRY_FLAGS.items():
-            if entry_flags & value != 0:
-                flags += key + " "
-        return flags
+            if entry_flags == value:
+                return key
+        return "Unknown flags"
 
+    def __get_file_attribute_flags__(self, file_attribute: int) -> str:
+        for key, value in FILE_ATTRIBUTE_FLAGS.items():
+            if file_attribute & value != 0:
+                return key
+
+        return "Unknown flags"
     # for debug
 
     def print_raw_mft(self, data) -> None:
