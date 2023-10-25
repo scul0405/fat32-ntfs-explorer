@@ -17,7 +17,7 @@ class FAT:
     self.FAT_TABLE = []
 
     for i in range(0, len(data), 4):
-      self.FAT_TABLE.append(int.from_bytes(data[i:i + 4], byteorder='little'))
+      self.FAT_TABLE.append(int.from_bytes(data[i:i + 4], 'little'))
   
   def get_cluster_chain(self, index: int) -> 'list[int]':
     cluster_chain = []
@@ -42,6 +42,8 @@ class Entry:
         self.attr = Attribute(0)
         self.size = 0
         self.total_name = ""
+        self.storage = []
+        self.file_content = ""
         self.parse_entry(data)
 
     # Parse the entry data
@@ -55,7 +57,7 @@ class Entry:
 
     # Parse the main entry
     def parse_main_entry(self, data):
-        self.name = data[:0x8] 
+        self.name = data[:0x8]
         self.ext = data[0x8:0xB]
         if self.name[:1] == b'\xe5':
             self.is_deleted = True
@@ -64,18 +66,18 @@ class Entry:
             self.name = ""
             return
 
-        self.attr = Attribute(int.from_bytes(self.flag, byteorder='little'))
+        self.attr = Attribute(int.from_bytes(self.flag, 'little'))
         if Attribute.VOLLABLE in self.attr:
             self.is_label = True
             return
 
-        self.start_cluster = int.from_bytes(data[0x14:0x16][::-1] + data[0x1A:0x1C][::-1], byteorder='big')
-        self.size = int.from_bytes(data[0x1C:0x20], byteorder='little')
+        self.start_cluster = int.from_bytes(data[0x1A:0x1C], 'little')
+        self.size = int.from_bytes(data[0x1C:0x20], 'little')
 
     def parse_subentry(self, data):
         self.name = b""
         for i in chain(range(0x1, 0xB), range(0xE, 0x1A), range(0x1C, 0x20)):
-            self.name += int.to_bytes(data[i], 1, byteorder='little')
+            self.name += int.to_bytes(data[i], 1, 'little')
             if self.name.endswith(b"\xff\xff"):
                 self.name = self.name[:-2]
                 break
@@ -87,7 +89,7 @@ class Entry:
     def is_directory(self) -> bool:
         return Attribute.DIRECTORY in self.attr
 
-class RDET:
+class DET:
   def __init__(self, data: bytes) -> None:
     self.entries: list[Entry] = []
     total_name = ""
@@ -101,14 +103,14 @@ class RDET:
             total_name = ""
             continue
 
-        # If the current entry is a subentry, add its name to the total name
+        # If the current entry is a sub entry, add its name to the total name
         if entry.is_subentry:
             total_name = entry.name + total_name
             continue
 
         # This stage is the main entry
         if total_name != "":
-            # Sum up all subentry names to the main entry
+            # Sum up all sub entry names to the main entry
             entry.total_name = total_name
         else:
             extend = entry.ext.strip().decode()
@@ -123,46 +125,14 @@ class RDET:
         total_name = ""
 
     # Save all main entries of a det
-    self.list_main_entry: 'list[Entry]' = [entry for entry in self.entries if entry.is_main_entry()]
+    self.list_main_entries: 'list[Entry]' = [entry for entry in self.entries if entry.is_main_entry()]
 
   # find entry whose name match the given name
   def find_entry(self, name) -> Entry:
-    for entry in self.list_main_entry:
+    for entry in self.list_main_entries:
       if entry.total_name.lower() == name.lower():
         return entry
     return None
-    
-class File:
-    def __init__(self, data) -> None:
-        self.storage = []
-        self.raw_data = b''
-        self.get_file_info(data)
-
-    def get_file_info(self, data):
-        self.filename = ""
-
-        for i in range(len(data)):
-           # is main entry (last loop)
-           if(i == len(data) - 1):
-                
-                if(len(data) == 1):
-                    self.filename = data[i][0x0:0x8].decode('utf-8')
-
-                self.extension = data[i][0x8:0xB].decode('utf-8')
-                self.is_folder = (self.extension == '   ')
-                # self.start_cluster = int.from_bytes(data[i][0x1A:0x1C], 'little')
-                self.start_cluster = int.from_bytes(data[0x14:0x16][::-1] + data[0x1A:0x1C][::-1], byteorder='big')
-                self.size = int.from_bytes(data[i][0x1C:0x20], 'little')
-           # is sub entry
-           else:
-                temp = data[i][0x1:0xB].decode('utf-16') + data[i][0xE:0x1A].decode('utf-16') + data[i][0x1C:0x20].decode('utf-16')
-                self.filename = temp + self.filename
-
-        end_filename = self.filename.find('\x00')
-        self.filename = self.filename[:end_filename]
-    
-
-
 
 class FAT32:
     def __init__(self, drive_name: str) -> None:
@@ -198,9 +168,9 @@ class FAT32:
 
             # RDET data
             self.RDET_data_raw = self.drive.read(self.SC * self.BPS)
-
+            
             # get list file
-            self.list_File = self.get_all_files(self.RDET_data_raw)
+            self.list_files = self.get_all_files(self.RDET_data_raw)
 
             print('Read Success')    
         except FileNotFoundError:
@@ -290,52 +260,39 @@ class FAT32:
 
         print("First Sector of Data: " + str(self.SDATA))
     
-    def get_all_files(self, entries_data):
-        list_Entry = []
-        list_File = []
-
-        for i in range(0, len(entries_data), 32):
-            new_entry = entries_data[i : i + 32]
-
-            if(int.from_bytes(new_entry[0xB:0xC],'little') == 0x0):
-                break
-
-            list_Entry.append(new_entry)
-
-            if(int.from_bytes(new_entry[0xB:0xC],'little') != 0x0f):
-                list_File.append(File(list_Entry))
-                list_Entry = []
+    def get_all_files(self, data):
+        list_File = DET(data).list_main_entries
 
         for i in list_File:
-            
-            if(i.start_cluster >= 2):
-                if(i.is_folder):
-                    self.get_folder_content(i)
-                else:
-                    self.get_file_content(i)
+            if(i.is_directory):
+                self.get_folder_content(i)
+            else:
+                self.get_file_content(i)
 
         return list_File
 
-    def get_file_content(self, file: File):
-        print(file.filename + '.' + file.extension)
+    def get_file_content(self, file: Entry):
         chain = self.FAT_data.get_cluster_chain(file.start_cluster)
         size_remaining = file.size
+        
+        if(file.ext.lower() == 'txt'):
+            for i in chain:
 
-        for i in chain:
+                if(size_remaining <= 0):
+                    break
 
-            if(size_remaining <= 0):
-                break
-
-            pos = self.cluster_to_sector(i) * self.BPS
-            self.drive.seek(pos)
-            byte_per_cluster = self.SC * self.BPS
-            read_data = self.drive.read(max(size_remaining , byte_per_cluster))
-            file.raw_data = file.raw_data + read_data
-            size_remaining = size_remaining - byte_per_cluster
+                pos = self.cluster_to_sector(i) * self.BPS
+                self.drive.seek(pos)
+                byte_per_cluster = self.SC * self.BPS
+                read_data = self.drive.read(min(size_remaining , byte_per_cluster))
+                file.file_content = file.file_content + read_data.decode('utf-8')
+                size_remaining = size_remaining - byte_per_cluster
+        else:
+            file.file_content = "Use other compatible app to run this file!"
     
-    def get_folder_content(self, folder: File):
-        print(folder.filename)
+    def get_folder_content(self, folder: Entry):
         chain = self.FAT_data.get_cluster_chain(folder.start_cluster)
+        raw_data = b''
 
         for i in chain:
 
@@ -343,11 +300,16 @@ class FAT32:
             self.drive.seek(pos)
             byte_per_cluster = self.SC * self.BPS
             read_data = self.drive.read(byte_per_cluster)
-            folder.raw_data = folder.raw_data + read_data
+            raw_data = raw_data + read_data
         
-        folder.raw_data = folder.raw_data[64:]
-        folder.storage = self.get_all_files(folder.raw_data)          
+        folder.storage = self.get_all_files(raw_data[64:])
     
     # From cluster index to sector index
     def cluster_to_sector(self, index):
         return self.SB + self.SF * self.NF + (index - 2) * self.SC
+    
+    def print_tree(self, list_File):
+
+        for i in list_File:
+            print(i.total_name)
+            self.print_tree(i.storage)
