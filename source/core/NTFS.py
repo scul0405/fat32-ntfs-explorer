@@ -149,6 +149,7 @@ class NTFS:
             body = self.drive.read(self.mft_entry_data["SIZE OF CONTENT"])
 
             self.mft_entry_data = {
+                # thằng này là mft_index của thằng cha, nếu là 5 thì nó là thằng thư mục gốc
                 "PARENT ID": int.from_bytes(body[0:6], byteorder=sys.byteorder),
                 "NAME LENGTH": body[64],
                 # không hiểu số 66 từ đâu ra nhưng thêm vào thì nó chạy đúng
