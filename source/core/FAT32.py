@@ -168,7 +168,7 @@ class FAT32:
 
         # RDET data
         # self.RDET_data_raw = self.drive.read(self.SC * self.BPS)
-        print(self.FC)
+        # print(self.FC)
         self.RDET_data_raw = self.get_data_from_cluster_chain(self.FC)
         
         # create tree
