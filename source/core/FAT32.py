@@ -26,7 +26,7 @@ class FAT:
       cluster_chain.append(index)
       index = self.FAT_TABLE[index]
 
-      if index == 0x0FFFFFFF or index == 0x0FFFFFF7:
+      if index == 0x0FFFFFFF or index == 0x0FFFFFF7 or index == 0xFFFFFFFF:
         break
       
     return cluster_chain
@@ -150,33 +150,36 @@ class FAT32:
             with open_windows_partition(drive_name) as drive:
                 self.bootsector_data_raw = drive.read(0x200)
                 self.get_bootsector_discription()
-            
-            # Reserved data
-            reserved_data_size = self.SB * self.BPS
-            self.reserved_data = self.drive.read(reserved_data_size)
-
-            # FAT data
-            FAT_data_size = self.SF * self.NF * self.BPS
-            self.FAT_data_raw = self.drive.read(FAT_data_size)
-            self.FAT_data = FAT(self.FAT_data_raw)
-
-            # RDET data
-            self.RDET_data_raw = self.drive.read(self.SC * self.BPS)
-            
-            # create tree
-            self.tree = Tree()
-            self.total_node = 0
-            self.tree.create_node(drive_name + ":" , self.total_node)
-            self.total_node = self.total_node + 1
-
-            # get list file
-            self.list_File = []
-            self.get_all_files(self.RDET_data_raw, 0)
 
             print('Read Success')    
         except FileNotFoundError:
             print("Drive Not Found")
             exit(1)
+
+        # Reserved data
+        reserved_data_size = self.SB * self.BPS
+        self.reserved_data = self.drive.read(reserved_data_size)
+        # self.reserved_data = self.drive.read(self.BPS * (self.SB - 1))
+
+        # FAT data
+        FAT_data_size = self.SF * self.NF * self.BPS
+        self.FAT_data_raw = self.drive.read(FAT_data_size)
+        self.FAT_data = FAT(self.FAT_data_raw)
+
+        # RDET data
+        # self.RDET_data_raw = self.drive.read(self.SC * self.BPS)
+        print(self.FC)
+        self.RDET_data_raw = self.get_data_from_cluster_chain(self.FC)
+        
+        # create tree
+        self.tree = Tree()
+        self.total_node = 0
+        self.tree.create_node(drive_name + ":" , self.total_node)
+        self.total_node = self.total_node + 1
+
+        # get list file
+        self.list_File = []
+        self.get_all_files(self.RDET_data_raw, 0)
 
     def get_bootsector_discription(self):
         # File System type  offset: 52h size: 8 bytes
@@ -263,7 +266,8 @@ class FAT32:
     
     def get_all_files(self, data, idx):
         list_File = DET(data).list_main_entries
-
+        for i in list_File:
+            print(i.total_name)
         for i in list_File:
             self.tree.create_node(i.total_name, self.total_node, idx)
             self.total_node = self.total_node + 1
@@ -312,6 +316,21 @@ class FAT32:
     # From cluster index to sector index
     def cluster_to_sector(self, index):
         return self.SB + self.SF * self.NF + (index - 2) * self.SC
+    
+    # Return byte data from cluster
+    def get_data_from_cluster(self, index):
+        pos = self.cluster_to_sector(index) * self.BPS
+        self.drive.seek(pos)
+        return self.drive.read(self.SC * self.BPS)
+    
+    def get_data_from_cluster_chain(self, index):
+        chain = self.FAT_data.get_cluster_chain(index)
+        raw_data = b''
+
+        for i in chain:
+            raw_data = raw_data + self.get_data_from_cluster(i)
+        
+        return raw_data
 
     # find entry whose name match the given name
     def find_file(self, name) -> Entry:
