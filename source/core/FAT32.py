@@ -23,11 +23,13 @@ class FAT:
   def get_cluster_chain(self, index: int) -> 'list[int]':
     cluster_chain = []
     while True:
-      cluster_chain.append(index)
-      index = self.FAT_TABLE[index]
 
-      if index == 0x0FFFFFFF or index == 0x0FFFFFF7:
-        break
+        cluster_chain.append(index)
+        index = self.FAT_TABLE[index]
+
+
+        if index == 0x0FFFFFFF or index == 0x0FFFFFF7:
+            break
       
     return cluster_chain
   
@@ -263,13 +265,13 @@ class FAT32:
     
     def get_all_files(self, data, idx):
         list_File = DET(data).list_main_entries
-
         for i in list_File:
             self.tree.create_node(i.total_name, self.total_node, idx)
+            current_file_idx = self.total_node
             self.total_node = self.total_node + 1
             
             if(i.is_directory()):
-                self.get_folder_content(i, idx + 1)
+                self.get_folder_content(i, current_file_idx)
             else:
                 self.get_file_content(i)
 
@@ -277,6 +279,10 @@ class FAT32:
 
 
     def get_file_content(self, file: Entry):
+
+        if(file.size == 0):
+            return
+        
         chain = self.FAT_data.get_cluster_chain(file.start_cluster)
         size_remaining = file.size
         
