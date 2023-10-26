@@ -6,12 +6,12 @@ from treelib import Node, Tree
 from utils import open_windows_partition
 
 class Attribute(Flag):
-    READ_ONLY = auto()
-    HIDDEN = auto()
-    SYSTEM = auto()
-    VOLLABLE = auto()
-    DIRECTORY = auto()
-    ARCHIVE = auto()
+    Read_Only = auto()
+    Hidden = auto()
+    System = auto()
+    Volume_Lable = auto()
+    Directory = auto()
+    Archive = auto()
 
 class FAT:
   def __init__(self, data) -> None:
@@ -46,6 +46,7 @@ class Entry:
         self.size = 0
         self.total_name = ""
         self.file_content = ""
+        self.display = ""
         self.parse_entry(data)
 
     # Parse the entry data
@@ -69,7 +70,7 @@ class Entry:
             return
 
         self.attr = Attribute(int.from_bytes(self.flag, 'little'))
-        if Attribute.VOLLABLE in self.attr:
+        if Attribute.Volume_Lable in self.attr:
             self.is_label = True
             return
 
@@ -86,10 +87,25 @@ class Entry:
         self.name = self.name.decode('utf-16le').strip('\x00')
 
     def is_main_entry(self) -> bool:
-        return not (self.is_empty or self.is_subentry or self.is_deleted or self.is_label or Attribute.SYSTEM in self.attr)
+        return not (self.is_empty or self.is_subentry or self.is_deleted or self.is_label or Attribute.System in self.attr)
 
     def is_directory(self) -> bool:
-        return Attribute.DIRECTORY in self.attr
+        return Attribute.Directory in self.attr
+
+    def set_display_in_tree(self, chain, SC):
+        self.display = self.total_name + ":\t"
+
+        if(self.size != 0):
+            self.display = self.display + "size: " + str(self.size) + "\t"
+
+        self.display = self.display + str(self.attr)
+
+        if (chain):
+            self.display = self.display + "\t Sectors: "
+
+        self.display = self.display + str(chain[0] * SC) + " -> " + str((chain[0] + len(chain)) * SC - 1)
+
+
 
 class DET:
   def __init__(self, data: bytes) -> None:
@@ -168,7 +184,9 @@ class FAT32:
             # create tree
             self.tree = Tree()
             self.total_node = 0
-            self.tree.create_node(drive_name + ":" , self.total_node)
+            drive_display = Entry(b'')
+            drive_display.display = drive_name + ":"
+            self.tree.create_node(drive_name + ":" , self.total_node, data=drive_display)
             self.total_node = self.total_node + 1
 
             # get list file
@@ -266,16 +284,17 @@ class FAT32:
     def get_all_files(self, data, idx):
         list_File = DET(data).list_main_entries
         for i in list_File:
-            self.tree.create_node(i.total_name, self.total_node, idx)
+            self.tree.create_node(i.total_name, self.total_node, idx, i)
             current_file_idx = self.total_node
             self.total_node = self.total_node + 1
-            
+            self.list_File.append(i)
+
             if(i.is_directory()):
                 self.get_folder_content(i, current_file_idx)
             else:
                 self.get_file_content(i)
 
-            self.list_File.append(i)
+            
 
 
     def get_file_content(self, file: Entry):
@@ -284,6 +303,7 @@ class FAT32:
             return
         
         chain = self.FAT_data.get_cluster_chain(file.start_cluster)
+        file.set_display_in_tree(chain , self.SC)
         size_remaining = file.size
         
         if(file.ext.decode('utf-8') == 'TXT'):
@@ -304,6 +324,7 @@ class FAT32:
     def get_folder_content(self, folder: Entry, idx):
         chain = self.FAT_data.get_cluster_chain(folder.start_cluster)
         raw_data = b''
+        folder.set_display_in_tree(chain, self.SC)
 
         for i in chain:
 
@@ -321,8 +342,18 @@ class FAT32:
 
     # find entry whose name match the given name
     def find_file(self, name) -> Entry:
+        print("Reading " + name + "...")
 
-        for i in self.list_File:
-            if i.total_name == name:
-                print(i.file_content)
-                break
+        for i in range(len(self.list_File)):
+
+            if self.list_File[i].total_name == name:
+
+                if self.list_File[i].is_directory():
+                    tree = self.tree.subtree(i + 1)
+                    tree.show(data_property="display")
+                else:
+                    print(self.list_File[i].file_content)
+
+                return
+        
+        print("No file found.")
