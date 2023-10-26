@@ -2,6 +2,7 @@ from enum import Flag, auto
 from base64 import decode
 from itertools import chain
 import binascii
+from treelib import Node, Tree
 from utils import open_windows_partition
 
 class Attribute(Flag):
@@ -42,7 +43,6 @@ class Entry:
         self.attr = Attribute(0)
         self.size = 0
         self.total_name = ""
-        self.storage = []
         self.file_content = ""
         self.parse_entry(data)
 
@@ -127,12 +127,6 @@ class DET:
     # Save all main entries of a det
     self.list_main_entries: 'list[Entry]' = [entry for entry in self.entries if entry.is_main_entry()]
 
-  # find entry whose name match the given name
-  def find_entry(self, name) -> Entry:
-    for entry in self.list_main_entries:
-      if entry.total_name.lower() == name.lower():
-        return entry
-    return None
 
 class FAT32:
     def __init__(self, drive_name: str) -> None:
@@ -169,8 +163,15 @@ class FAT32:
             # RDET data
             self.RDET_data_raw = self.drive.read(self.SC * self.BPS)
             
+            # create tree
+            self.tree = Tree()
+            self.total_node = 0
+            self.tree.create_node(drive_name + ":" , self.total_node)
+            self.total_node = self.total_node + 1
+
             # get list file
-            self.list_files = self.get_all_files(self.RDET_data_raw)
+            self.list_File = []
+            self.get_all_files(self.RDET_data_raw, 0)
 
             print('Read Success')    
         except FileNotFoundError:
@@ -260,22 +261,26 @@ class FAT32:
 
         print("First Sector of Data: " + str(self.SDATA))
     
-    def get_all_files(self, data):
+    def get_all_files(self, data, idx):
         list_File = DET(data).list_main_entries
 
         for i in list_File:
-            if(i.is_directory):
-                self.get_folder_content(i)
+            self.tree.create_node(i.total_name, self.total_node, idx)
+            self.total_node = self.total_node + 1
+            
+            if(i.is_directory()):
+                self.get_folder_content(i, idx + 1)
             else:
                 self.get_file_content(i)
 
-        return list_File
+            self.list_File.append(i)
+
 
     def get_file_content(self, file: Entry):
         chain = self.FAT_data.get_cluster_chain(file.start_cluster)
         size_remaining = file.size
         
-        if(file.ext.lower() == 'txt'):
+        if(file.ext.decode('utf-8') == 'TXT'):
             for i in chain:
 
                 if(size_remaining <= 0):
@@ -290,7 +295,7 @@ class FAT32:
         else:
             file.file_content = "Use other compatible app to run this file!"
     
-    def get_folder_content(self, folder: Entry):
+    def get_folder_content(self, folder: Entry, idx):
         chain = self.FAT_data.get_cluster_chain(folder.start_cluster)
         raw_data = b''
 
@@ -302,14 +307,16 @@ class FAT32:
             read_data = self.drive.read(byte_per_cluster)
             raw_data = raw_data + read_data
         
-        folder.storage = self.get_all_files(raw_data[64:])
+        folder.storage = self.get_all_files(raw_data[64:], idx)
     
     # From cluster index to sector index
     def cluster_to_sector(self, index):
         return self.SB + self.SF * self.NF + (index - 2) * self.SC
-    
-    def print_tree(self, list_File):
 
-        for i in list_File:
-            print(i.total_name)
-            self.print_tree(i.storage)
+    # find entry whose name match the given name
+    def find_file(self, name) -> Entry:
+
+        for i in self.list_File:
+            if i.total_name == name:
+                print(i.file_content)
+                break

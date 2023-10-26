@@ -14,4 +14,6 @@ from core.FAT32 import FAT32
 fat32 = FAT32("E")
 # print('RDET')
 # fat32.print_table_offset(fat32.RDET_data_raw)
-fat32.print_tree(fat32.list_files)
+fat32.tree.show()
+fat32.find_file("E.TXT")
+#fat32.print_tree()
