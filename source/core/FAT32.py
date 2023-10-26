@@ -101,9 +101,7 @@ class Entry:
         self.display = self.display + str(self.attr)
 
         if (chain):
-            self.display = self.display + "\t Sectors: "
-
-        self.display = self.display + str(chain[0] * SC) + " -> " + str((chain[0] + len(chain)) * SC - 1)
+            self.display = self.display + "\t Sectors: " + str(chain[0] * SC) + " -> " + str((chain[0] + len(chain)) * SC - 1)
 
 
 
@@ -300,6 +298,7 @@ class FAT32:
     def get_file_content(self, file: Entry):
 
         if(file.size == 0):
+            file.set_display_in_tree([], self.SC)
             return
         
         chain = self.FAT_data.get_cluster_chain(file.start_cluster)

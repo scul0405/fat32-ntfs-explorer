@@ -18,4 +18,5 @@ fat32.print_bst_info()
 fat32.tree.show(data_property="display")
 
 fat32.find_file("E.TXT")
+fat32.find_file("test.docx")
 fat32.find_file("New folder")
