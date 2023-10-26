@@ -15,5 +15,7 @@ fat32 = FAT32("F")
 # print('RDET')
 # fat32.print_table_offset(fat32.RDET_data_raw)
 fat32.tree.show()
-# fat32.find_file("test.txt")
-# fat32.print_tree()
+
+fat32.find_file("DFASD.TXT")
+#fat32.print_tree()
+
