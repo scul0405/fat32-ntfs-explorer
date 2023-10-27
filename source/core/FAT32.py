@@ -18,6 +18,8 @@ class FAT:
     self.FAT_TABLE = []
 
     for i in range(0, len(data), 4):
+
+      # Lấy 4 bytes tiếp theo từ data chuyển thành int đưa vào FAT_TABLE
       self.FAT_TABLE.append(int.from_bytes(data[i:i + 4], 'little'))
   
   def get_cluster_chain(self, index: int) -> 'list[int]':
