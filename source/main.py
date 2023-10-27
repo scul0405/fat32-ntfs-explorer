@@ -11,12 +11,12 @@ from core.FAT32 import FAT32
 # for i in range(0, 12):
 #     ntfs.extract_mft()
 
-fat32 = FAT32("E")
+fat32 = FAT32("F")
 fat32.print_bst_info()
 
 # print tree
 fat32.tree.show(data_property="display")
 
-fat32.find_file("E.TXT")
-fat32.find_file("test.docx")
-fat32.find_file("New folder")
+fat32.find_file("TEST.TXT")
+# fat32.find_file("test.docx")
+# fat32.find_file("New folder")
