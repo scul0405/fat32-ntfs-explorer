@@ -97,26 +97,43 @@ class Entry:
         if(self.size != 0):
             self.display = self.display + "size: " + str(self.size) + "\t"
 
-        # self.display = self.display + str(self.attr)
         self.display = self.display + self.display_attr()
-        
+
+
         if (chain):
             self.display = self.display + "\t Sectors: " + str(chain[0] * SC) + " -> " + str((chain[0] + len(chain)) * SC - 1)
 
     # Convert attribute of the entry to string
     def display_attr(self) -> str:
+        attr = []
+
         if self.attr.value & 0b1:
-          return 'ReadOnly'
+            attr.append('Read-Only')
+
         if self.attr.value & 0b10:
-          return 'Hidden'
+            attr.append('Hidden')
+
         if self.attr.value & 0b100:
-          return 'System'
+            attr.append('System')
+
         if self.attr.value & 0b1000:
-            return 'VolLable'
+            attr.append('VolLable')
+
         if self.attr.value & 0b10000:
-            return 'Directory'
+            attr.append('Directory')
+            
         if self.attr.value & 0b100000:
-            return 'Archive'
+            attr.append('Archive')
+
+        display = "Attribute: "
+
+        for i in attr:
+            display = display + i
+
+            if(i != attr[len(attr) - 1]):
+                display = display + " - "
+
+        return display
 
 class DET:
   def __init__(self, data: bytes) -> None:
