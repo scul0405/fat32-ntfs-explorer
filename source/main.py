@@ -19,7 +19,7 @@ for _ in range(ntfs.boot_sector["Total Sector"]):
         print(e)
         pass
 
-ntfs.__build_tree_dir__()
+ntfs.__build_dir_tree__()
 
 # fat32 = FAT32("F")
 # fat32.print_raw_bst()

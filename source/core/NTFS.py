@@ -283,7 +283,7 @@ class NTFS:
                     print(".", end='')
             print()
 
-    def __build_tree_dir__(self):
+    def __build_dir_tree__(self):
         # Xuất thông tin ổ đĩa
         print("Directory tree:")
         print(self.drive_name + ":")
