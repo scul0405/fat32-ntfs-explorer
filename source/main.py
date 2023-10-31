@@ -4,7 +4,7 @@
 from core.NTFS import NTFS
 from core.FAT32 import FAT32
 
-ntfs = NTFS("F")
+ntfs = NTFS("E")
 # ntfs.print_bst_info()
 # # get standard NTFS file system metadata files (Doc: page 268-269)
 # for i in range(0, 14):
@@ -16,7 +16,6 @@ for _ in range(ntfs.boot_sector["Total Sector"]):
     try:
         ntfs.__extract_mft__()
     except Exception as e:
-        print(e)
         pass
 
 ntfs.__build_dir_tree__()

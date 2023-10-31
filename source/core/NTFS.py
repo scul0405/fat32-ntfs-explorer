@@ -164,7 +164,7 @@ class NTFS:
             #print("[STANDARD INFORMATION FLAG VALUE]", self.mft_standard_flag)
             # end debug
 
-        # ATTRIBUTE THỨ HAI - FILE NAME
+        # ATTRIBUTE STANDARD INFORMATION
         self.current_offset += self.mft_attribute_header["Attribute length"]
         self.drive.seek(self.current_offset)
         self.mft_entry_raw_data = self.drive.read(16)
@@ -187,6 +187,15 @@ class NTFS:
             self.drive.seek(self.current_offset)
 
             body = self.drive.read(self.mft_entry_data["SIZE OF CONTENT"])
+
+            # seek ngay tới offset phía sau của $FILE_NAME
+            self.current_offset += self.mft_entry_data["SIZE OF CONTENT"] + 2
+            self.drive.seek(self.current_offset)
+            while self.drive.read(2)[0] != 0x40:
+                self.current_offset += 2
+
+            self.drive.seek(self.current_offset)
+            ############################
 
             self.mft_entry_data = {
                 # thằng này là mft_index của thằng cha, nếu là 5 thì nó là thằng thư mục gốc
@@ -211,15 +220,56 @@ class NTFS:
                     "INDEX": self.current_mft_index_entry,
                     "TYPE": self.mft_standard_flag == 32 and "FILE" or "FOLDER",
                 })
+
                 if self.mft_standard_flag == 0:
                     self.valid_parent_id.append(self.current_mft_index_entry)
+
+                if "FILE" == (self.mft_standard_flag == 32 and "FILE" or "FOLDER"):
+                    # Giữ lại file name để cuối hàm in ra màn hình
+                    current_file_name = self.mft_entry_data["FILE NAME"]
+                    
+                    # self.current_offset += 6
+                    # $OBJECT_ID -> Ignore nó
+                    self.mft_entry_raw_data = self.drive.read(16)
+                    self.mft_attribute_header = self.__extract_mft_header__()
+
+                    # $DATA
+                    # $DATA HEADER
+                    self.current_offset += self.mft_attribute_header["Attribute length"]
+                    self.drive.seek(self.current_offset)
+                    self.mft_entry_raw_data = self.drive.read(16)
+                    self.mft_attribute_header = self.__extract_mft_header__()
+                    
+
+                    # Giữ lại offset bắt đầu phần DATA của attribute $DATA                    
+                    current_data_offset = self.current_offset
+                    self.current_offset += 16
+                    self.drive.seek(self.current_offset)
+                    self.mft_entry_raw_data = self.drive.read(6)
+
+                    # Đọc offset và size của content
+                    self.mft_entry_data = {
+                        "SIZE OF CONTENT": int.from_bytes(self.mft_entry_raw_data[0:4], byteorder=sys.byteorder),
+                        "OFFSET TO CONTENT": int.from_bytes(self.mft_entry_raw_data[4:6], byteorder=sys.byteorder),
+                    }
+
+                    # Trở ngược về đầu phần DATA và đọc content
+                    self.current_offset = current_data_offset + self.mft_entry_data["OFFSET TO CONTENT"]
+                    self.drive.seek(self.current_offset)
+
+                    content = self.drive.read(self.mft_entry_data["SIZE OF CONTENT"])
+
+                    print("--------------- CONTENT OF \"", current_file_name, "\"")
+                    for i in content:
+                        print(chr(i), end='')
+                    print("\n--------------- END CONTENT -------------")
+                    print("-----------------------------------------")
         else:
             print("Non-resident")
-        print()
         # debug
         #time.sleep(2)
         self.current_mft_index_entry += 1
-
+    
     def __extract_mft_header__(self) -> dict:
         header = {
             "Attribute type": int.from_bytes(self.mft_entry_raw_data[0:4], byteorder=sys.byteorder),
