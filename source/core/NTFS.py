@@ -55,10 +55,16 @@ MFT_ATTRIBUTE_TYPE = {
     "$LOGGED_UTILITY_STREAM": 0x100
 }
 
+ACCEPT_ATTRIBUTE_FLAG = [
+    0, # Folder
+    32, # File
+]
+
 
 class NTFS:
     def __init__(self, drive_name: str) -> None:
         self.raw_data = None
+        self.drive_name = drive_name
         self.drive = open_windows_partition(drive_name)
         self.boot_sector = None
         self.current_offset = 0
@@ -66,6 +72,9 @@ class NTFS:
         self.mft_attribute_header = None
         self.mft_entry_raw_data = None
         self.mft_entry_data = None
+        self.mft_standard_flag = 0
+        self.valid_parent_id = [5] # 5 là root
+        self.dir_tree_data = []
         try:
             self.raw_data = self.drive.read(512)
             self.__extract_bpb__()
@@ -97,10 +106,6 @@ class NTFS:
         # READ FIRST MFT ENTRY
         self.mft_entry_raw_data = self.drive.read(MFT_ENTRY_SIZE)
 
-        # debug
-        self.print_raw_mft(self.mft_entry_raw_data)
-        # end debug
-
         self.mft_entry_header = {
             "Signature": self.mft_entry_raw_data[0x0:0x4].decode("utf-8"),
             "Sequence Number": int.from_bytes(self.mft_entry_raw_data[0x4:0x6], byteorder=sys.byteorder),
@@ -115,23 +120,58 @@ class NTFS:
         if self.mft_entry_header["Signature"] != "FILE":
             self.current_mft_index_entry += 1
             return
+        
+        # debug
+        #self.print_raw_mft(self.mft_entry_raw_data)
+        # end debug
 
         # debug
-        print("[MFT ENTRY]", self.mft_entry_header)
+        #print("[MFT ENTRY]", self.mft_entry_header)
+        # end debug
 
         # ATTRIBUTE THỨ NHẤT - STANDARD INFORMATION
         self.current_offset += self.mft_entry_header["Offset to the first attribute"]
         self.drive.seek(self.current_offset)
         self.mft_entry_raw_data = self.drive.read(16)
         self.mft_attribute_header = self.__extract_mft_header__()
-        print("[STANDARD INFORMATION]", self.mft_attribute_header)
+        # debug
+        #print("[STANDARD INFORMATION]", self.mft_attribute_header)
+        # end debug
+
+        # Đọc flag
+        # Giữ lại current_offset làm offset bắt đầu từ header cho dễ tính toán
+        current_standard_offset = self.current_offset + 16 + 4 # skip header và 4 byte kích thước nội dung
+        if self.mft_attribute_header["Flag"] == "Resident":
+            # Lấy thông tin byte 20-21 để biết vị trí offset của data
+            self.drive.seek(current_standard_offset)
+            self.mft_entry_raw_data = self.drive.read(2)
+
+            # Tính offset để nhảy để data của standard info attribute
+            current_standard_offset = self.current_offset + int.from_bytes(self.mft_entry_raw_data, byteorder=sys.byteorder)
+
+            # Bắt đầu đọc data, lấy byte thứ 32 - 35 để biết giá trị cờ báo
+            self.drive.seek(current_standard_offset + 32) # Seek 32 byte đầu
+            self.mft_standard_flag = int.from_bytes(self.drive.read(4), byteorder=sys.byteorder)
+            # 0 - FOLDER
+            # 32 - các file hợp lệ
+            # Skip nếu như đó là file ẩn hoặc hệ thống
+            if self.mft_standard_flag not in ACCEPT_ATTRIBUTE_FLAG:
+                self.current_mft_index_entry += 1
+                return
+
+            # debug
+            #print("[STANDARD INFORMATION FLAG]", self.__get_file_attribute_flags__(self.mft_standard_flag))
+            #print("[STANDARD INFORMATION FLAG VALUE]", self.mft_standard_flag)
+            # end debug
 
         # ATTRIBUTE THỨ HAI - FILE NAME
         self.current_offset += self.mft_attribute_header["Attribute length"]
         self.drive.seek(self.current_offset)
         self.mft_entry_raw_data = self.drive.read(16)
         self.mft_attribute_header = self.__extract_mft_header__()
-        print("[FILE NAME HEADER]", self.mft_attribute_header)
+        # debug
+        #print("[FILE NAME HEADER]", self.mft_attribute_header)
+        # end debug
 
         if self.mft_attribute_header["Flag"] == "Resident":
             self.current_offset += 16
@@ -153,15 +193,31 @@ class NTFS:
                 "PARENT ID": int.from_bytes(body[0:6], byteorder=sys.byteorder),
                 "NAME LENGTH": body[64],
                 # không hiểu số 66 từ đâu ra nhưng thêm vào thì nó chạy đúng
+                # byte thứ 66 bắt đầu là tên file (docs có ghi)
                 "FILE NAME": body[66:66 + body[64] * 2].decode("utf-16"),
             }
 
-            print("[FILE NAME]", self.mft_entry_data)
+            # debug
+            # print("[FILE NAME]", self.mft_entry_data)
+            # end debug
+
+            # Save to directory tree data
+            # Ý tưởng ở đây là nếu các file không phải của hệ thống thì nó luôn có 1 parent folder,
+            # và ta lưu các folder index vào valid_parent_id nếu nó là folder
+            if self.mft_entry_data["PARENT ID"] in self.valid_parent_id:
+                self.dir_tree_data.append({
+                    "PARENT ID": self.mft_entry_data["PARENT ID"],
+                    "NAME": self.mft_entry_data["FILE NAME"],
+                    "INDEX": self.current_mft_index_entry,
+                    "TYPE": self.mft_standard_flag == 32 and "FILE" or "FOLDER",
+                })
+                if self.mft_standard_flag == 0:
+                    self.valid_parent_id.append(self.current_mft_index_entry)
         else:
             print("Non-resident")
         print()
         # debug
-        time.sleep(2)
+        #time.sleep(2)
         self.current_mft_index_entry += 1
 
     def __extract_mft_header__(self) -> dict:
@@ -227,34 +283,21 @@ class NTFS:
                     print(".", end='')
             print()
 
-    def print_raw_bpb(self) -> None:
-        str_data = binascii.hexlify(self.raw_data[0:BPS_SIZE]).decode("utf-8")
+    def __build_tree_dir__(self):
+        # Xuất thông tin ổ đĩa
+        print("Directory tree:")
+        print(self.drive_name + ":")
+        # Xuất thông tin thư mục
+        self.print_folder_tree(self.dir_tree_data, 5)
 
-        # Print header
-        print("offset ", end=" ")
-        for i in range(0, 16):
-            print("{:2x}".format(i), end=' ')
-        print()
-
-        # print 16 byte each line
-        for i in range(0, len(str_data), 32):
-            line = str_data[i:i+32]
-
-            # print offset
-            offset = int(i / 32)
-            print("{:07x}0".format(offset), end=" ")
-
-            # print hex
-            for j in range(0, len(line), 2):
-                print(line[j:j+2], end=' ')
-
-            # print ascii
-            for j in range(0, len(line), 2):
-                char = line[j:j+2]
-                # ignore \r \n
-
-                if int(char, 16) >= 32 and int(char, 16) <= 126:
-                    print(chr(int(char, 16)), end='')
-                else:
-                    print(".", end='')
-            print()
+    def print_folder_tree(self, data, parent_id, indent='', elbow='└──', pipe='│  ', tee='├──', blank='   '):
+        children = [item for item in data if item['PARENT ID'] == parent_id]
+        for i, child in enumerate(children):
+            name = child['NAME']
+            is_last_child = (i == len(children) - 1)
+            if child['TYPE'] == 'FOLDER':
+                print(indent + (elbow if is_last_child else tee) + name)
+                next_indent = indent + (blank if is_last_child else pipe)
+                self.print_folder_tree(data, child['INDEX'], next_indent, elbow, pipe, tee, blank)
+            else:
+                print(indent + (elbow if is_last_child else tee) + name)
