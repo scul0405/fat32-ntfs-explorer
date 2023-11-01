@@ -1,14 +1,11 @@
 from utils import open_windows_partition
 
 import sys
-import binascii
-import time
 
 # Constants
 BPS_SIZE = 512
 MFT_END = int.from_bytes(b'\xff\xff\xff\xff', byteorder=sys.byteorder)
 MFT_ENTRY_SIZE = 1024
-ATTR_FILE_NAME = 48
 VOLUME_HEADER_OFFSET = 512
 
 MFT_ENTRY_FLAGS = {
@@ -16,24 +13,6 @@ MFT_ENTRY_FLAGS = {
     "MFT_RECORD_IS_DIRECTORY": 2,
     "MFT_RECORD_IN_EXTENDED": 4,
     "MFT_RECORD_IS_VIEW_INDEX": 8
-}
-
-FILE_ATTRIBUTE_FLAGS = {
-    "READ_ONLY": 0x00000001,
-    "HIDDEN": 0x00000002,
-    "SYSTEM": 0x00000004,
-    "ARCHIVE": 0x00000020,
-    "DEVICE": 0x00000040,
-    "NORMAL": 0x00000080,
-    "TEMPORARY": 0x00000100,
-    "SPARSE_FILE": 0x00000200,
-    "REPARSE_POINT": 0x00000400,
-    "COMPRESSED": 0x00000800,
-    "OFFLINE": 0x00001000,
-    "NOT_CONTENT_INDEXED": 0x00002000,
-    "ENCRYPTED": 0x00004000,
-    "DIRECTORY": 0x10000000,
-    "INDEX_VIEW": 0x20000000
 }
 
 MFT_ATTRIBUTE_TYPE = {
@@ -103,7 +82,7 @@ class NTFS:
             self.current_mft_index_entry * MFT_ENTRY_SIZE
         self.drive.seek(self.current_offset)
 
-        # READ FIRST MFT ENTRY
+        # Đọc MFT entry đầu tiên
         self.mft_entry_raw_data = self.drive.read(MFT_ENTRY_SIZE)
 
         self.mft_entry_header = {
@@ -117,26 +96,16 @@ class NTFS:
             "Base reference": int.from_bytes(self.mft_entry_raw_data[0x20:0x28], byteorder=sys.byteorder),
         }
 
+        # Nếu không phải là file thì skip
         if self.mft_entry_header["Signature"] != "FILE":
             self.current_mft_index_entry += 1
             return
         
-        # debug
-        #self.print_raw_mft(self.mft_entry_raw_data)
-        # end debug
-
-        # debug
-        #print("[MFT ENTRY]", self.mft_entry_header)
-        # end debug
-
-        # ATTRIBUTE THỨ NHẤT - STANDARD INFORMATION
+        # Đọc header của attribute $STANDARD INFORMATION
         self.current_offset += self.mft_entry_header["Offset to the first attribute"]
         self.drive.seek(self.current_offset)
         self.mft_entry_raw_data = self.drive.read(16)
         self.mft_attribute_header = self.__extract_mft_header__()
-        # debug
-        #print("[STANDARD INFORMATION]", self.mft_attribute_header)
-        # end debug
 
         # Đọc flag
         # Giữ lại current_offset làm offset bắt đầu từ header cho dễ tính toán
@@ -159,20 +128,13 @@ class NTFS:
                 self.current_mft_index_entry += 1
                 return
 
-            # debug
-            #print("[STANDARD INFORMATION FLAG]", self.__get_file_attribute_flags__(self.mft_standard_flag))
-            #print("[STANDARD INFORMATION FLAG VALUE]", self.mft_standard_flag)
-            # end debug
-
-        # ATTRIBUTE STANDARD INFORMATION
+        # ATTRIBUTE $FILE_NAME
         self.current_offset += self.mft_attribute_header["Attribute length"]
         self.drive.seek(self.current_offset)
         self.mft_entry_raw_data = self.drive.read(16)
         self.mft_attribute_header = self.__extract_mft_header__()
-        # debug
-        #print("[FILE NAME HEADER]", self.mft_attribute_header)
-        # end debug
 
+        # Seek tới info attribute của $FILE_NAME
         if self.mft_attribute_header["Flag"] == "Resident":
             self.current_offset += 16
             self.drive.seek(self.current_offset)
@@ -185,7 +147,6 @@ class NTFS:
 
             self.current_offset += self.mft_entry_data["OFFSET TO CONTENT"] - 16
             self.drive.seek(self.current_offset)
-
             body = self.drive.read(self.mft_entry_data["SIZE OF CONTENT"])
 
             # seek ngay tới offset phía sau của $FILE_NAME
@@ -198,17 +159,12 @@ class NTFS:
             ############################
 
             self.mft_entry_data = {
-                # thằng này là mft_index của thằng cha, nếu là 5 thì nó là thằng thư mục gốc
+                # id này là mft_index của id cha, nếu là 5 thì nó là id thư mục gốc
                 "PARENT ID": int.from_bytes(body[0:6], byteorder=sys.byteorder),
                 "NAME LENGTH": body[64],
-                # không hiểu số 66 từ đâu ra nhưng thêm vào thì nó chạy đúng
                 # byte thứ 66 bắt đầu là tên file (docs có ghi)
                 "FILE NAME": body[66:66 + body[64] * 2].decode("utf-16"),
             }
-
-            # debug
-            # print("[FILE NAME]", self.mft_entry_data)
-            # end debug
 
             # Save to directory tree data
             # Ý tưởng ở đây là nếu các file không phải của hệ thống thì nó luôn có 1 parent folder,
@@ -228,12 +184,11 @@ class NTFS:
                     # Giữ lại file name để cuối hàm in ra màn hình
                     current_file_name = self.mft_entry_data["FILE NAME"]
                     
-                    # self.current_offset += 6
                     # $OBJECT_ID -> Ignore nó
                     self.mft_entry_raw_data = self.drive.read(16)
                     self.mft_attribute_header = self.__extract_mft_header__()
 
-                    # $DATA
+                    # Attribute $DATA
                     # $DATA HEADER
                     self.current_offset += self.mft_attribute_header["Attribute length"]
                     self.drive.seek(self.current_offset)
@@ -259,15 +214,24 @@ class NTFS:
 
                     content = self.drive.read(self.mft_entry_data["SIZE OF CONTENT"])
 
-                    print("--------------- CONTENT OF \"", current_file_name, "\"")
-                    for i in content:
-                        print(chr(i), end='')
-                    print("\n--------------- END CONTENT -------------")
-                    print("-----------------------------------------")
+                    # In ra nội dung file
+                    if current_file_name.split(".")[-1] != "txt":
+                        print("--------------- CONTENT OF [", current_file_name, "]")
+                        print("[INFO] This file is not a text file, use another application to open it.", end="")
+                        print("\n--------------- END CONTENT -------------")
+                    else:
+                        print("--------------- CONTENT OF [", current_file_name, "]")
+                        """
+                            Python bị lỗi dấu \r \n nên không thể dùng string.decode("utf-16") được
+                            mà thay vào đó tôi dùng cách chuyển từng character sang ascii rồi in ra
+                        """
+                        # print(content.decode("utf-16"))
+                        for i in content:
+                            print(chr(i), end='')
+                        print("\n--------------- END CONTENT -------------")
+                    print()
         else:
             print("Non-resident")
-        # debug
-        #time.sleep(2)
         self.current_mft_index_entry += 1
     
     def __extract_mft_header__(self) -> dict:
@@ -292,46 +256,6 @@ class NTFS:
             if entry_flags == value:
                 return key
         return "Unknown flags"
-
-    def __get_file_attribute_flags__(self, file_attribute: int) -> str:
-        for key, value in FILE_ATTRIBUTE_FLAGS.items():
-            if file_attribute & value != 0:
-                return key
-
-        return "Unknown flags"
-    # for debug
-
-    def print_raw_mft(self, data) -> None:
-        str_data = binascii.hexlify(data).decode("utf-8")
-
-        # Print header
-        print("offset ", end=" ")
-        for i in range(0, 16):
-            print("{:2x}".format(i), end=' ')
-        print()
-
-        # print 16 byte each line
-        for i in range(0, len(str_data), 32):
-            line = str_data[i:i+32]
-
-            # print offset
-            offset = int(i / 32)
-            print("{:07x}0".format(offset), end=" ")
-
-            # print hex
-            for j in range(0, len(line), 2):
-                print(line[j:j+2], end=' ')
-
-            # print ascii
-            for j in range(0, len(line), 2):
-                char = line[j:j+2]
-                # ignore \r \n
-
-                if int(char, 16) >= 32 and int(char, 16) <= 126:
-                    print(chr(int(char, 16)), end='')
-                else:
-                    print(".", end='')
-            print()
 
     def __build_dir_tree__(self):
         # Xuất thông tin ổ đĩa
