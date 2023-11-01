@@ -48,7 +48,6 @@ class Entry:
         self.is_deleted = False
         self.is_empty = False
         self.is_label = False
-        self.date_updated = 0
         self.attr = Attribute(0)
         self.size = 0
         self.total_name = ""
