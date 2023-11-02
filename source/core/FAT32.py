@@ -396,10 +396,11 @@ class FAT32:
             if i.total_name == name:
                 self.found_file = True
                 print("Reading " + name + "...")
+                print("\t- Size: " + str(i.size if i.size != 0 else 0))
                 if i.is_directory():
                     self.print_tree(i)
                 else:
-                    print(i.file_content)
+                    print('\t- Content: ',i.file_content)
                 return
             elif i.is_directory():
                 self.find_file_in_folder(name, i.storage)
