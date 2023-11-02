@@ -4,20 +4,22 @@
 from core.NTFS import NTFS
 from core.FAT32 import FAT32
 
-# ntfs = NTFS("F")
-# ntfs.print_raw_bpb()
+ntfs = NTFS("E")
 # ntfs.print_bst_info()
 # # get standard NTFS file system metadata files (Doc: page 268-269)
-# for i in range(0, 12):
+# for i in range(0, 14):
 #     ntfs.extract_mft()
 
-# Un Edit code here and choose disk to run code fat32
-# fat32 = FAT32("E")
+# skip tới folder ditmemay để debug cho nhanh
+ntfs.current_mft_index_entry = 37
+for _ in range(ntfs.boot_sector["Total Sector"]):
+    try:
+        ntfs.__extract_mft__()
+    except Exception as e:
+        pass
+
+ntfs.__build_dir_tree__()
+
+# fat32 = FAT32("F")
+# fat32.print_raw_bst()
 # fat32.print_bst_info()
-
-# # print tree
-# fat32.tree.show(data_property="display")
-
-# fat32.find_file("E.TXT")
-# fat32.find_file("test.docx")
-# fat32.find_file("New folder")
