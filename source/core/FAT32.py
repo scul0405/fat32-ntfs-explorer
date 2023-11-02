@@ -446,7 +446,7 @@ def FAT32_display():
                 fat32.print_tree(fat32.disk)
             case 3:
                 filename = input("Searching file: ")
-                fat32.find_file(filename)
+                fat32.find_file(filename.upper())
             case 4:
                 break
 
