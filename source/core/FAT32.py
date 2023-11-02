@@ -205,31 +205,33 @@ class FAT32:
             with open_windows_partition(drive_name) as drive:
                 self.bootsector_data_raw = drive.read(0x200)
                 self.get_bootsector_discription()
-            
-            # Reserved data
-            reserved_data_size = self.SB * self.BPS
-            self.reserved_data = self.drive.read(reserved_data_size)
-
-            # FAT data
-            FAT_data_size = self.SF * self.NF * self.BPS
-            self.FAT_data_raw = self.drive.read(FAT_data_size)
-            self.FAT_data = FAT(self.FAT_data_raw)
-
-            # RDET data
-            self.RDET_data_raw = self.drive.read(self.SC * self.BPS)
-
-            # Create root
-            self.disk = Entry(b'')
-            self.disk.total_name = drive_name + ":"
-            self.disk.storage = self.get_all_files(self.RDET_data_raw)
-
-            # found file/folder flag
-            self.found_file = False
-
-            print('Read Success')    
-        except FileNotFoundError:
-            print("Drive Not Found")
+  
+        except Exception as e:
+            print(e)
+            print("[ERROR] Unknown error occurred")
             exit(1)
+
+        # Reserved data
+        reserved_data_size = self.SB * self.BPS
+        self.reserved_data = self.drive.read(reserved_data_size)
+
+        # FAT data
+        FAT_data_size = self.SF * self.NF * self.BPS
+        self.FAT_data_raw = self.drive.read(FAT_data_size)
+        self.FAT_data = FAT(self.FAT_data_raw)
+
+        # RDET data
+        self.RDET_data_raw = self.drive.read(self.SC * self.BPS)
+
+        # Create root
+        self.disk = Entry(b'')
+        self.disk.total_name = drive_name + ":"
+        self.disk.storage = self.get_all_files(self.RDET_data_raw)
+
+        # found file/folder flag
+        self.found_file = False
+
+        print('Read Success')  
     
     # Read all disk information in bootsector
     def get_bootsector_discription(self):
@@ -437,17 +439,21 @@ def FAT32_display():
         print("3. Read selected file/folder.")
         print("4. Exit.")
 
-        choice = int(input("Select: "))
+        try:
+            choice = int(input("Select: "))
 
-        match choice:
-            case 1:
-                fat32.print_bst_info()
-            case 2:
-                fat32.print_tree(fat32.disk)
-            case 3:
-                filename = input("Searching file: ")
-                fat32.find_file(filename.upper())
-            case 4:
-                break
+            match choice:
+                case 1:
+                    fat32.print_bst_info()
+                case 2:
+                    fat32.print_tree(fat32.disk)
+                case 3:
+                    filename = input("Searching file: ")
+                    fat32.find_file(filename.upper())
+                case 4:
+                    break
+        except Exception as e:
+            print(f"[ERROR] {e}")
+            exit()
 
         os.system("pause")
