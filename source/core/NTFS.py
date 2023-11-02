@@ -39,6 +39,11 @@ ACCEPT_ATTRIBUTE_FLAG = [
     32, # File
 ]
 
+# Constants
+BPS_SIZE = 512
+MFT_END = int.from_bytes(b'\xff\xff\xff\xff', byteorder=sys.byteorder)
+MFT_ENTRY_SIZE = 1024
+ATTR_FILE_NAME = 48
 
 class NTFS:
     def __init__(self, drive_name: str) -> None:
@@ -95,7 +100,6 @@ class NTFS:
             "Total entry size": int.from_bytes(self.mft_entry_raw_data[0x1C:0x20], byteorder=sys.byteorder),
             "Base reference": int.from_bytes(self.mft_entry_raw_data[0x20:0x28], byteorder=sys.byteorder),
         }
-
         # Nếu không phải là file thì skip
         if self.mft_entry_header["Signature"] != "FILE":
             self.current_mft_index_entry += 1
