@@ -2,11 +2,11 @@ from utils import open_windows_partition
 
 import sys
 import datetime
+import math
 
 # Constants
 BPS_SIZE = 512
 MFT_END = int.from_bytes(b'\xff\xff\xff\xff', byteorder=sys.byteorder)
-MFT_ENTRY_SIZE = 1024
 VOLUME_HEADER_OFFSET = 512
 
 MFT_ENTRY_FLAGS = {
@@ -43,7 +43,6 @@ ACCEPT_ATTRIBUTE_FLAG = [
 # Constants
 BPS_SIZE = 512
 MFT_END = int.from_bytes(b'\xff\xff\xff\xff', byteorder=sys.byteorder)
-MFT_ENTRY_SIZE = 1024
 ATTR_FILE_NAME = 48
 
 class NTFS:
@@ -57,13 +56,23 @@ class NTFS:
         self.mft_attribute_header = None
         self.mft_entry_raw_data = None
         self.mft_entry_data = None
+        self.mft_entry_size = None
         self.mft_standard_flag = 0
         self.file_created_time = None
         self.valid_parent_id = [5] # 5 là root
         self.dir_tree_data = []
         try:
-            self.raw_data = self.drive.read(512)
+            self.raw_data = self.drive.read(BPS_SIZE)
             self.__extract_bpb__()
+
+            if self.boot_sector["System ID"] != "NTFS":
+                return
+
+            for _ in range(self.boot_sector["Total Sector"]):
+                try:
+                    self.__extract_mft__()
+                except Exception as e:
+                    pass
         except FileNotFoundError:
             print("Drive not found")
             exit(1)
@@ -78,19 +87,25 @@ class NTFS:
             "Total Sector": int.from_bytes(self.raw_data[0x28:0x30], byteorder=sys.byteorder),
             "MFT Cluster": int.from_bytes(self.raw_data[0x30:0x38], byteorder=sys.byteorder),
             "MFT Mirror Cluster": int.from_bytes(self.raw_data[0x38:0x40], byteorder=sys.byteorder),
-            "Size of MTF Entry": int.from_bytes(self.raw_data[0x40:0x44], byteorder=sys.byteorder),
+            "Size of MTF Entry": int(math.pow(2, math.fabs(int.from_bytes(self.raw_data[0x40:0x41], byteorder=sys.byteorder, signed=True)))),
+            "Cluster no Index Buffer": int.from_bytes(self.raw_data[0x44:0x45], byteorder=sys.byteorder),
+            "Volume Serial Number": int.from_bytes(self.raw_data[0x48:0x50], byteorder=sys.byteorder),
         }
+        self.mft_entry_size = self.boot_sector["Size of MTF Entry"]
         return self.boot_sector
 
     def __extract_mft__(self) -> dict:
-
+        # Tính offset của MFT entry hiện tại
         self.current_offset = self.boot_sector["MFT Cluster"] * self.boot_sector["Sectors Per Cluster"] * \
             self.boot_sector["Bytes Per Sector"] + \
-            self.current_mft_index_entry * MFT_ENTRY_SIZE
+            self.current_mft_index_entry * self.mft_entry_size
         self.drive.seek(self.current_offset)
 
+        # lưu lại sector bắt đầu của MFT entry hiện tại
+        begin_sector = int(self.current_offset / self.boot_sector["Bytes Per Sector"])
+
         # Đọc MFT entry đầu tiên
-        self.mft_entry_raw_data = self.drive.read(MFT_ENTRY_SIZE)
+        self.mft_entry_raw_data = self.drive.read(self.mft_entry_size)
 
         self.mft_entry_header = {
             "Signature": self.mft_entry_raw_data[0x0:0x4].decode("utf-8"),
@@ -189,6 +204,7 @@ class NTFS:
                     "NAME": self.mft_entry_data["FILE NAME"],
                     "INDEX": self.current_mft_index_entry,
                     "TYPE": self.mft_standard_flag == 32 and "FILE" or "FOLDER",
+                    "SECTOR OFFSET": begin_sector,
                     "CREATED TIME": self.file_created_time.strftime("%d/%m/%Y %H:%M:%S"),
                 })
 
@@ -271,6 +287,13 @@ class NTFS:
         # Xuất thông tin thư mục
         self.print_folder_tree(self.dir_tree_data, 5)
 
+    def read_content_of_file(self, file_name: str):
+        for item in self.dir_tree_data:
+            if item["NAME"] == file_name:
+                # return item["CONTENT"]
+                return item
+        return None
+
     def print_folder_tree(self, data, parent_id, indent='', elbow='└──', pipe='│  ', tee='├──', blank='   '):
         children = [item for item in data if item['PARENT ID'] == parent_id]
         for i, child in enumerate(children):
@@ -294,3 +317,5 @@ class NTFS:
         print("Địa chỉ MFT Cluster:", self.boot_sector["MFT Cluster"])
         print("Địa chỉ MFT Mirror Cluster:", self.boot_sector["MFT Mirror Cluster"])
         print("Kích thước MTF Entry:", self.boot_sector["Size of MTF Entry"])
+        print("Số cluster Index Buffer:", self.boot_sector["Cluster no Index Buffer"])
+        print("Volume Serial:", self.boot_sector["Volume Serial Number"])
