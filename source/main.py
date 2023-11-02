@@ -1,16 +1,16 @@
 # from [folder].[file.py] import [class]
 
-
+import os
 from core.NTFS import NTFS
 from core.FAT32 import FAT32
 
-ntfs = NTFS("E")
-# ntfs.print_bst_info()
-# # get standard NTFS file system metadata files (Doc: page 268-269)
-# for i in range(0, 14):
-#     ntfs.extract_mft()
+volumes = [chr(x) + ":" for x in range(65, 91) if os.path.exists(chr(x) + ":")]
+print("Available volumes:")
+for i in range(len(volumes)):
+    print(f"{i + 1}/", volumes[i])
 
-# skip tới folder ditmemay để debug cho nhanh
+ntfs = NTFS("F")
+
 ntfs.current_mft_index_entry = 37
 for _ in range(ntfs.boot_sector["Total Sector"]):
     try:
@@ -19,6 +19,7 @@ for _ in range(ntfs.boot_sector["Total Sector"]):
         pass
 
 ntfs.__build_dir_tree__()
+print(ntfs.dir_tree_data)
 
 # fat32 = FAT32("F")
 # fat32.print_raw_bst()

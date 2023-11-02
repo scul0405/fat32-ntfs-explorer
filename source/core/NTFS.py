@@ -1,6 +1,7 @@
 from utils import open_windows_partition
 
 import sys
+import datetime
 
 # Constants
 BPS_SIZE = 512
@@ -57,6 +58,7 @@ class NTFS:
         self.mft_entry_raw_data = None
         self.mft_entry_data = None
         self.mft_standard_flag = 0
+        self.file_created_time = None
         self.valid_parent_id = [5] # 5 là root
         self.dir_tree_data = []
         try:
@@ -122,7 +124,15 @@ class NTFS:
             # Tính offset để nhảy để data của standard info attribute
             current_standard_offset = self.current_offset + int.from_bytes(self.mft_entry_raw_data, byteorder=sys.byteorder)
 
-            # Bắt đầu đọc data, lấy byte thứ 32 - 35 để biết giá trị cờ báo
+            # Bắt đầu đọc data
+            # Lấy byte thứ 0 - 7 để biết thời gian tạo file
+            self.drive.seek(current_standard_offset)
+            self.mft_entry_raw_data = self.drive.read(8)
+            timestamp = int.from_bytes(self.mft_entry_raw_data, byteorder=sys.byteorder)
+            self.file_created_time = datetime.datetime(1601, 1, 1) + datetime.timedelta(microseconds=timestamp / 10)
+            
+
+            # Lấy byte thứ 32 - 35 để biết giá trị cờ báo
             self.drive.seek(current_standard_offset + 32) # Seek 32 byte đầu
             self.mft_standard_flag = int.from_bytes(self.drive.read(4), byteorder=sys.byteorder)
             # 0 - FOLDER
@@ -179,6 +189,7 @@ class NTFS:
                     "NAME": self.mft_entry_data["FILE NAME"],
                     "INDEX": self.current_mft_index_entry,
                     "TYPE": self.mft_standard_flag == 32 and "FILE" or "FOLDER",
+                    "CREATED TIME": self.file_created_time.strftime("%d/%m/%Y %H:%M:%S"),
                 })
 
                 if self.mft_standard_flag == 0:
@@ -218,22 +229,14 @@ class NTFS:
 
                     content = self.drive.read(self.mft_entry_data["SIZE OF CONTENT"])
 
-                    # In ra nội dung file
-                    if current_file_name.split(".")[-1] != "txt":
-                        print("--------------- CONTENT OF [", current_file_name, "]")
-                        print("[INFO] This file is not a text file, use another application to open it.", end="")
-                        print("\n--------------- END CONTENT -------------")
+                    # Lưu content và extension file
+                    self.dir_tree_data[-1]["CONTENT_SIZE"] = len(content)
+                    self.dir_tree_data[-1]["FILE_EXT"] = current_file_name.split(".")[-1]
+
+                    if current_file_name.split(".")[-1] == "txt":
+                        self.dir_tree_data[-1]["CONTENT"] = content
                     else:
-                        print("--------------- CONTENT OF [", current_file_name, "]")
-                        """
-                            Python bị lỗi dấu \r \n nên không thể dùng string.decode("utf-16") được
-                            mà thay vào đó tôi dùng cách chuyển từng character sang ascii rồi in ra
-                        """
-                        # print(content.decode("utf-16"))
-                        for i in content:
-                            print(chr(i), end='')
-                        print("\n--------------- END CONTENT -------------")
-                    print()
+                        self.dir_tree_data[-1]["CONTENT"] = ""
         else:
             print("Non-resident")
         self.current_mft_index_entry += 1
