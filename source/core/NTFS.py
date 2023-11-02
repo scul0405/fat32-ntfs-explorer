@@ -70,7 +70,7 @@ class NTFS:
 
     def __extract_bpb__(self) -> dict:
         self.boot_sector = {
-            "System ID": self.raw_data[0x03:0x0B].decode("utf-8"),
+            "System ID": self.raw_data[0x03:0x0B].decode("utf-8").strip(),
             "Bytes Per Sector": int.from_bytes(self.raw_data[0x0B:0x0D], byteorder=sys.byteorder),
             "Sectors Per Cluster": int.from_bytes(self.raw_data[0x0D:0x0E], byteorder=sys.byteorder),
             "Sectors Per track": int.from_bytes(self.raw_data[0x18:0x1A], byteorder=sys.byteorder),
@@ -282,3 +282,15 @@ class NTFS:
                 self.print_folder_tree(data, child['INDEX'], next_indent, elbow, pipe, tee, blank)
             else:
                 print(indent + (elbow if is_last_child else tee) + name)
+
+    def print_partrition_data(self):
+        print("Thông tin chi tiết ổ đĩa", self.drive_name, ":")
+        print("System ID:", self.boot_sector["System ID"])
+        print("Bytes mỗi Sector:", self.boot_sector["Bytes Per Sector"])
+        print("Sectors mỗi Cluster:", self.boot_sector["Sectors Per Cluster"])
+        print("Sectors mỗi track:", self.boot_sector["Sectors Per track"])
+        print("Số lượng Heads:", self.boot_sector["Number Of Heads"])
+        print("Tổng số Sector:", self.boot_sector["Total Sector"])
+        print("Địa chỉ MFT Cluster:", self.boot_sector["MFT Cluster"])
+        print("Địa chỉ MFT Mirror Cluster:", self.boot_sector["MFT Mirror Cluster"])
+        print("Kích thước MTF Entry:", self.boot_sector["Size of MTF Entry"])
