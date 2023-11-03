@@ -392,7 +392,7 @@ class FAT32:
             return
 
         for i in folder:
-            if i.total_name == name:
+            if i.total_name == name.upper():
                 self.found_file = True
                 print("Đọc nội dung " + name + "...")
                 if i.is_directory():
