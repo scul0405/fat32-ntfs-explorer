@@ -1,7 +1,7 @@
 # Operation System - Project 01 - FAT32 & NTFS Explorer
 
 ## Requirement
-Terminal to run this source must be administrator permission.
+Terminal to run this source must be run with administrator permission.
 
 ## Usage
 Go to source folder and run code with below instruction
