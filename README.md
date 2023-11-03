@@ -3,7 +3,9 @@
 ## Requirement
 Terminal to run this source must be administrator permission.
 
-## Usage 
+## Usage
+Go to source folder and run code with below instruction
+
 ```md
 main.py [-h] [-v VOLUME] [-t] [-d] [-l] [-f FILENAME]
 

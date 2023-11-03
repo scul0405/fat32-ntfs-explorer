@@ -43,7 +43,7 @@ ACCEPT_ATTRIBUTE_FLAG = [
 
 # Constants
 BPS_SIZE = 512
-MFT_END = int.from_bytes(b'\xff\xff\xff\xff', byteorder=sys.byteorder)
+MFT_END = 0
 ATTR_FILE_NAME = 48
 
 class NTFS:
@@ -74,7 +74,10 @@ class NTFS:
                 try:
                     self.__extract_mft__()
                 except Exception as e:
-                    pass
+                    if str(e) == "Reach MFT end":
+                        break
+                    else:
+                        pass
         except FileNotFoundError:
             print("Drive not found, please try another drive or use -l to list available volumes")
             exit(1)
@@ -109,6 +112,11 @@ class NTFS:
         # Đọc MFT entry đầu tiên
         self.mft_entry_raw_data = self.drive.read(self.mft_entry_size)
 
+        # Kiểm tra xem đã là MFT end chưa, nếu rồi thì throw exception
+        # Dunno why mft entry index must greater than 37 but it works lmfao help
+        if  int.from_bytes(self.mft_entry_raw_data[0x0:0x4], byteorder=sys.byteorder) == MFT_END and self.current_mft_index_entry > 37:
+            raise Exception("Reach MFT end")
+
         self.mft_entry_header = {
             "Signature": self.mft_entry_raw_data[0x0:0x4].decode("utf-8"),
             "Sequence Number": int.from_bytes(self.mft_entry_raw_data[0x4:0x6], byteorder=sys.byteorder),
@@ -123,7 +131,7 @@ class NTFS:
         if self.mft_entry_header["Signature"] != "FILE":
             self.current_mft_index_entry += 1
             return
-        
+
         # Đọc header của attribute $STANDARD INFORMATION
         self.current_offset += self.mft_entry_header["Offset to the first attribute"]
         self.drive.seek(self.current_offset)
@@ -182,12 +190,6 @@ class NTFS:
 
             # seek ngay tới offset phía sau của $FILE_NAME
             self.current_offset += self.mft_entry_data["SIZE OF CONTENT"] + 2
-            self.drive.seek(self.current_offset)
-            while self.drive.read(2)[0] != 0x40:
-                self.current_offset += 2
- 
-            self.drive.seek(self.current_offset)
-            ############################
 
             self.mft_entry_data = {
                 # id này là mft_index của id cha, nếu là 5 thì nó là id thư mục gốc
@@ -216,6 +218,14 @@ class NTFS:
                 if "FILE" == (self.mft_standard_flag == 32 and "FILE" or "FOLDER"):
                     # Giữ lại file name để cuối hàm in ra màn hình
                     current_file_name = self.mft_entry_data["FILE NAME"]
+
+                    # Xử lý padding giữa $FILE_NAME và $OBJECT_ID
+                    self.drive.seek(self.current_offset)
+                    while self.drive.read(2)[0] != 0x40:
+                        self.current_offset += 2
+
+                    self.drive.seek(self.current_offset)
+                    ############################
                     
                     # $OBJECT_ID -> Ignore nó
                     self.mft_entry_raw_data = self.drive.read(16)
