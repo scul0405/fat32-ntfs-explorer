@@ -131,7 +131,7 @@ class Entry:
         if self.attr.value & 0b100000:
             attr.append('Archive')
 
-        display = "Attribute: "
+        display = "Thuộc tính: "
 
         for i in attr:
             display = display + i
@@ -181,7 +181,6 @@ class DET:
     # Save all main entries of a det
     self.list_main_entries: 'list[Entry]' = [entry for entry in self.entries if entry.is_main_entry()]
 
-# Main class, store all other components
 class FAT32:
     # Read and store reserved data (including bootsector), FATs, RDET
     def __init__(self, drive_name: str) -> None:
@@ -189,7 +188,7 @@ class FAT32:
         # Open disk
         try:
             self.drive = open(r'\\.\%s:' % drive_name, 'rb')
-            print(f"Reading {drive_name}...")
+            print(f"Đọc ổ {drive_name}...")
         except FileNotFoundError:
             print(f"[ERROR] No volume named {drive_name}")
             exit()
@@ -231,7 +230,7 @@ class FAT32:
         # found file/folder flag
         self.found_file = False
 
-        print('Read Success')  
+        print('Đọc thành công')  
     
     # Read all disk information in bootsector
     def get_bootsector_discription(self):
@@ -298,26 +297,26 @@ class FAT32:
 
     # Print all disk information got from bootsector
     def print_bst_info(self):
-        print("FAT type: " + self.file_type)
+        print("Loại FAT: " + self.file_type)
 
-        print("Bytes per Sector: " + str(self.BPS))
+        print("Bytes mỗi Sector: " + str(self.BPS))
 
-        print("Sectors per Cluster: " + str(self.SC))
+        print("Sectors mỗi Cluster: " + str(self.SC))
 
         print("Reserved Sectors: " + str(self.SB))
 
-        print("Copies of FAT: " + str(self.NF))
+        print("Số bảng FAT: " + str(self.NF))
 
-        print("Total Sectors: " + str(self.SV))
+        print("Tổng số: " + str(self.SV))
 
-        print("FAT Size: " + str(self.SF))
+        print("Kích thước của FAT: " + str(self.SF))
 
-        print("First Cluster of RDET: " + str(self.FC))
+        print("Cluster đầu tiên của RDET: " + str(self.FC))
 
         # First Sector of FAT = SB
-        print("First Sector of FAT: " + str(self.SB))
+        print("Sector đầu tiên của FAT: " + str(self.SB))
 
-        print("First Sector of Data: " + str(self.SDATA))
+        print("Sector đầu tiên của Data: " + str(self.SDATA))
 
     # Get all files/folders from data (RDET, SDET) given (Mutually recursive with get_folder_content)
     def get_all_files(self, data):
@@ -356,7 +355,7 @@ class FAT32:
                 file.file_content = file.file_content + read_data.decode('utf-8')
                 size_remaining = size_remaining - byte_per_cluster
         else:
-            file.file_content = "Use other compatible app to run this file!"
+            file.file_content = "Chương trình không hỗ trợ đọc file có định dạng khác txt"
     
     # Get content of folder from given list entries (all files/folders contain in it) (Mutually recursive with get_all_files)
     def get_folder_content(self, folder: Entry):
@@ -385,7 +384,7 @@ class FAT32:
         self.find_file_in_folder(name, self.disk.storage)
         
         if self.found_file == False:
-            print("No file found.")
+            print("Không tìm thấy file.")
 
     # Find file in folder matches given name (Recursion)
     def find_file_in_folder(self, name, folder):
@@ -395,12 +394,12 @@ class FAT32:
         for i in folder:
             if i.total_name == name:
                 self.found_file = True
-                print("Reading " + name + "...")
-                print("\t- Size: " + str(i.size if i.size != 0 else 0))
+                print("Đọc nội dung " + name + "...")
                 if i.is_directory():
                     self.print_tree(i)
                 else:
-                    print('\t- Content: ',i.file_content)
+                    print("\t- Kích thước: " + str(i.size if i.size != 0 else 0))
+                    print('\t- Nội dung: ',i.file_content)
                 return
             elif i.is_directory():
                 self.find_file_in_folder(name, i.storage)
@@ -416,7 +415,7 @@ class FAT32:
                 print(next_indent + i.display)
                 self.print_children_tree(i.storage, next_indent, elbow, pipe, tee, blank)
             else:
-                print(indent + (elbow if is_last_child else tee) + i.total_name + '\tsize: ' + str(i.size if i.size != 0 else 0))
+                print(indent + (elbow if is_last_child else tee) + i.total_name + '\tKích thước: ' + str(i.size if i.size != 0 else 0))
                 print(indent + (blank if is_last_child else pipe) + i.display)
 
     # Print tree with given root
@@ -427,34 +426,3 @@ class FAT32:
             print(folder.display) 
 
         self.print_children_tree(folder.storage)
-
-def FAT32_display():
-    drive = input("Select disk: ")
-    fat32 = FAT32(drive)
-
-    while(1):
-        os.system("cls")
-        print("----------FAT 32----------")
-        print("1. Read disk information.")
-        print("2. Print folder tree.")
-        print("3. Read selected file/folder.")
-        print("4. Exit.")
-
-        try:
-            choice = int(input("Select: "))
-
-            match choice:
-                case 1:
-                    fat32.print_bst_info()
-                case 2:
-                    fat32.print_tree(fat32.disk)
-                case 3:
-                    filename = input("Searching file: ")
-                    fat32.find_file(filename.upper())
-                case 4:
-                    break
-        except Exception as e:
-            print(f"[ERROR] {e}")
-            exit()
-
-        os.system("pause")
