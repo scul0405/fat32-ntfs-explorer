@@ -1,9 +1,11 @@
-# fat32-ntfs-explorer
-OS - Project 01
+# Operation System - Project 01 - FAT32 & NTFS Explorer
 
-# Usage 
+## Requirement
+Terminal to run this source must be administrator permission.
+
+## Usage 
 ```md
-usage: main.py [-h] [-v VOLUME] [-t] [-d] [-l] [-f FILENAME]
+main.py [-h] [-v VOLUME] [-t] [-d] [-l] [-f FILENAME]
 
 Process volume information.
 
