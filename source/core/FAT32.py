@@ -175,7 +175,6 @@ class DET:
     # Save all main entries of a det
     self.list_main_entries: 'list[Entry]' = [entry for entry in self.entries if entry.is_main_entry()]
 
-
 class FAT32:
     def __init__(self, drive_name: str) -> None:
         self.bootsector_data_raw = None
@@ -290,26 +289,26 @@ class FAT32:
             print()
 
     def print_bst_info(self):
-        print("FAT type: " + self.file_type)
+        print("Loại FAT: " + self.file_type)
 
-        print("Bytes per Sector: " + str(self.BPS))
+        print("Bytes mỗi Sector: " + str(self.BPS))
 
-        print("Sectors per Cluster: " + str(self.SC))
+        print("Sectors mỗi Cluster: " + str(self.SC))
 
         print("Reserved Sectors: " + str(self.SB))
 
         print("Copies of FAT: " + str(self.NF))
 
-        print("Total Sectors: " + str(self.SV))
+        print("Tổng số: " + str(self.SV))
 
         print("FAT Size: " + str(self.SF))
 
-        print("First Cluster of RDET: " + str(self.FC))
+        print("Cluster đầu tiên của RDET: " + str(self.FC))
 
         # First Sector of FAT = SB
-        print("First Sector of FAT: " + str(self.SB))
+        print("Sector đầu tiên của FAT: " + str(self.SB))
 
-        print("First Sector of Data: " + str(self.SDATA))
+        print("Sector đầu tiên của Data: " + str(self.SDATA))
     
     def get_all_files(self, data, idx):
         list_File = DET(data).list_main_entries
@@ -326,9 +325,7 @@ class FAT32:
             else:
                 self.get_file_content(i)
 
-            
-
-
+           
     def get_file_content(self, file: Entry):
         if(file.size == 0):
             file.set_display_in_tree([], self.SC)

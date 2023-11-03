@@ -50,21 +50,18 @@ if (manager["volume"] != None):
     # Trường hợp phân vùng là FAT32
     else:
         fat32 = FAT32(manager["volume"])
-        print("FAT32") 
+
+        if (manager["detail"] == True):
+            fat32.print_bst_info()
+
+        if (manager["tree"] == True):
+            # gọi hàm in ra cây thư mục
+            pass
+            
+        if (manager["filename"] != None):
+            # xử lý đọc content file và in ra màn hình
+            # input là manager["filename"] (tên file cần đọc)
+            pass
 else:
     print("No volume selected")
 
-
-# ntfs.current_mft_index_entry = 37
-# for _ in range(ntfs.boot_sector["Total Sector"]):
-#     try:
-#         ntfs.__extract_mft__()
-#     except Exception as e:
-#         pass
-
-# ntfs.__build_dir_tree__()
-# print(ntfs.dir_tree_data)
-
-# fat32 = FAT32("F")
-# fat32.print_raw_bst()
-# fat32.print_bst_info()
