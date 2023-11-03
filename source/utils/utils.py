@@ -1,4 +1,5 @@
 import os
+import binascii
 
 def open_windows_partition(
     letter,
@@ -22,3 +23,5 @@ def print_vailable_volume():
     print("Available volumes:")
     for i in range(len(volumes)):
         print(f"{i + 1}/", volumes[i])
+
+

@@ -9,6 +9,7 @@ parser = argparse.ArgumentParser(description='Process volume information.')
 parser.add_argument('-v', '--volume', type=str, required=False, help='volume to process')
 parser.add_argument('-t', '--tree', action="store_true", help='print directory tree')
 parser.add_argument('-d', '--detail', action="store_true", help='detail of volume')
+parser.add_argument('-r', '--raw', action="store_true", help='print raw data on disk')
 parser.add_argument("-l", "--list", action="store_true", help="list available volumes")
 parser.add_argument("-f", "--filename", type=str, help="file to process")
 args = parser.parse_args()
@@ -22,6 +23,9 @@ if (manager["volume"] != None):
     ntfs = NTFS(manager["volume"])
     # Trường hợp phân vùng là NTFS
     if ntfs.boot_sector["System ID"] == "NTFS":
+        if (manager["raw"] == True):
+            ntfs.print_raw_mft()
+
         if (manager["detail"] == True): 
             ntfs.print_partrition_data()
 

@@ -3,6 +3,7 @@ from utils import open_windows_partition
 import sys
 import datetime
 import math
+import binascii
 
 # Constants
 BPS_SIZE = 512
@@ -49,7 +50,7 @@ class NTFS:
     def __init__(self, drive_name: str) -> None:
         self.raw_data = None
         self.drive_name = drive_name
-        self.drive = open_windows_partition(drive_name)
+        self.drive = None
         self.boot_sector = None
         self.current_offset = 0
         self.current_mft_index_entry = 0
@@ -62,6 +63,7 @@ class NTFS:
         self.valid_parent_id = [5] # 5 là root
         self.dir_tree_data = []
         try:
+            self.drive = open_windows_partition(drive_name)
             self.raw_data = self.drive.read(BPS_SIZE)
             self.__extract_bpb__()
 
@@ -74,7 +76,7 @@ class NTFS:
                 except Exception as e:
                     pass
         except FileNotFoundError:
-            print("Drive not found")
+            print("Drive not found, please try another drive or use -l to list available volumes")
             exit(1)
 
     def __extract_bpb__(self) -> dict:
@@ -116,7 +118,7 @@ class NTFS:
             "Real size of the file": int.from_bytes(self.mft_entry_raw_data[0x18:0x1C], byteorder=sys.byteorder),
             "Total entry size": int.from_bytes(self.mft_entry_raw_data[0x1C:0x20], byteorder=sys.byteorder),
             "Base reference": int.from_bytes(self.mft_entry_raw_data[0x20:0x28], byteorder=sys.byteorder),
-        }
+        }   
         # Nếu không phải là file thì skip
         if self.mft_entry_header["Signature"] != "FILE":
             self.current_mft_index_entry += 1
@@ -183,7 +185,7 @@ class NTFS:
             self.drive.seek(self.current_offset)
             while self.drive.read(2)[0] != 0x40:
                 self.current_offset += 2
-
+ 
             self.drive.seek(self.current_offset)
             ############################
 
@@ -193,7 +195,7 @@ class NTFS:
                 "NAME LENGTH": body[64],
                 # byte thứ 66 bắt đầu là tên file (docs có ghi)
                 "FILE NAME": body[66:66 + body[64] * 2].decode("utf-16"),
-            }
+            }   
 
             # Save to directory tree data
             # Ý tưởng ở đây là nếu các file không phải của hệ thống thì nó luôn có 1 parent folder,
@@ -306,6 +308,33 @@ class NTFS:
             else:
                 print(indent + (elbow if is_last_child else tee) + name)
 
+    def print_raw_mft(self) -> None:
+        str_data = binascii.hexlify(self.raw_data).decode("utf-8")
+        
+        # Print header
+        print("offset ", end=" ")
+        for i in range(0, 16):
+            print("{:2x}".format(i), end=' ')
+        print()
+        # print 16 byte each line
+        for i in range(0, len(str_data), 32):
+            line = str_data[i:i+32]
+            # print offset
+            offset = int(i / 32)
+            print("{:07x}0".format(offset), end=" ")
+            # print hex
+            for j in range(0, len(line), 2):
+                print(line[j:j+2], end=' ')
+            # print ascii
+            for j in range(0, len(line), 2):
+                char = line[j:j+2]
+                # ignore \r \n
+                if int(char, 16) >= 32 and int(char, 16) <= 126:
+                    print(chr(int(char, 16)), end='')
+                else:
+                    print(".", end='')
+            print()
+    
     def print_partrition_data(self):
         print("Thông tin chi tiết ổ đĩa", self.drive_name, ":")
         print("System ID:", self.boot_sector["System ID"])
