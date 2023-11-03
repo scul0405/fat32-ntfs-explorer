@@ -59,12 +59,11 @@ if (manager["volume"] != None):
             fat32.print_bst_info()
 
         if (manager["tree"] == True):
-            # gọi hàm in ra cây thư mục
+            fat32.print_tree(fat32.disk)
             pass
             
         if (manager["filename"] != None):
-            # xử lý đọc content file và in ra màn hình
-            # input là manager["filename"] (tên file cần đọc)
+            fat32.find_file(manager["filename"])
             pass
 else:
     print("No volume selected")
