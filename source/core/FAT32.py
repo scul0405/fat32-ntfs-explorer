@@ -297,6 +297,8 @@ class FAT32:
 
     # Print all disk information got from bootsector
     def print_bst_info(self):
+        print("Thông tin chi tiết ổ đĩa " + self.disk.total_name)
+
         print("Loại FAT: " + self.file_type)
 
         print("Bytes mỗi Sector: " + str(self.BPS))
