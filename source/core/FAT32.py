@@ -297,6 +297,8 @@ class FAT32:
 
     # Print all disk information got from bootsector
     def print_bst_info(self):
+        print("Thông tin chi tiết ổ đĩa " + self.disk.total_name)
+
         print("Loại FAT: " + self.file_type)
 
         print("Bytes mỗi Sector: " + str(self.BPS))
@@ -392,14 +394,15 @@ class FAT32:
             return
 
         for i in folder:
-            if i.total_name == name.upper():
+            if i.total_name.upper() == name.upper():
                 self.found_file = True
-                print("Đọc nội dung " + name + "...")
+                print("----[ " + name + " ]----")
                 if i.is_directory():
                     self.print_tree(i)
                 else:
-                    print("\t- Kích thước: " + str(i.size if i.size != 0 else 0))
-                    print('\t- Nội dung: ',i.file_content)
+                    print("+ Kích thước: " + str(i.size if i.size != 0 else 0))
+                    print('---- Nội dung: ----\n',i.file_content)
+                    print('-------------------')
                 return
             elif i.is_directory():
                 self.find_file_in_folder(name, i.storage)
