@@ -224,13 +224,10 @@ class NTFS:
                     self.drive.seek(self.current_offset)
                     while self.drive.read(2)[0] != 0x80:
                         self.current_offset += 2
-
                     self.drive.seek(self.current_offset)
 
                     # Attribute $DATA
                     # $DATA HEADER
-                    self.current_offset += self.mft_attribute_header["Attribute length"]
-                    self.drive.seek(self.current_offset)
                     self.mft_entry_raw_data = self.drive.read(16)
                     self.mft_attribute_header = self.__extract_mft_header__()
 
