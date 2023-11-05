@@ -10,7 +10,7 @@ BPS_SIZE = 512
 MFT_END = int.from_bytes(b'\xff\xff\xff\xff', byteorder=sys.byteorder)
 VOLUME_HEADER_OFFSET = 512
 
-MFT_ENTRY_FLAGS = {
+MFT_ENTRY_FLAGS = { 
     "MFT_RECORD_IN_USE": 1,
     "MFT_RECORD_IS_DIRECTORY": 2,
     "MFT_RECORD_IN_EXTENDED": 4,
@@ -70,14 +70,6 @@ class NTFS:
             if self.boot_sector["System ID"] != "NTFS":
                 return
 
-            for _ in range(self.boot_sector["Total Sector"]):
-                try:
-                    self.__extract_mft__()
-                except Exception as e:
-                    if str(e) == "Reach MFT end":
-                        break
-                    else:
-                        pass
         except FileNotFoundError:
             print("Drive not found, please try another drive or use -l to list available volumes")
             exit(1)
@@ -117,21 +109,26 @@ class NTFS:
         if  int.from_bytes(self.mft_entry_raw_data[0x0:0x4], byteorder=sys.byteorder) == MFT_END and self.current_mft_index_entry > 37:
             raise Exception("Reach MFT end")
 
-        self.mft_entry_header = {
-            "Signature": self.mft_entry_raw_data[0x0:0x4].decode("utf-8"),
-            "Sequence Number": int.from_bytes(self.mft_entry_raw_data[0x4:0x6], byteorder=sys.byteorder),
-            "Reference Count": int.from_bytes(self.mft_entry_raw_data[0x6:0x8], byteorder=sys.byteorder),
-            "Offset to the first attribute": int.from_bytes(self.mft_entry_raw_data[0x14:0x16], byteorder=sys.byteorder),
-            "Entry Flags": self.__get_entry_flags__(int.from_bytes(self.mft_entry_raw_data[0x16:0x18], byteorder=sys.byteorder)),
-            "Real size of the file": int.from_bytes(self.mft_entry_raw_data[0x18:0x1C], byteorder=sys.byteorder),
-            "Total entry size": int.from_bytes(self.mft_entry_raw_data[0x1C:0x20], byteorder=sys.byteorder),
-            "Base reference": int.from_bytes(self.mft_entry_raw_data[0x20:0x28], byteorder=sys.byteorder),
-        }   
+        try:
+            self.mft_entry_header = {
+                "Signature": self.mft_entry_raw_data[0x0:0x4].decode("utf-8"),
+                "Sequence Number": int.from_bytes(self.mft_entry_raw_data[0x4:0x6], byteorder=sys.byteorder),
+                "Reference Count": int.from_bytes(self.mft_entry_raw_data[0x6:0x8], byteorder=sys.byteorder),
+                "Offset to the first attribute": int.from_bytes(self.mft_entry_raw_data[0x14:0x16], byteorder=sys.byteorder),
+                "Entry Flags": self.__get_entry_flags__(int.from_bytes(self.mft_entry_raw_data[0x16:0x18], byteorder=sys.byteorder)),
+                "Real size of the file": int.from_bytes(self.mft_entry_raw_data[0x18:0x1C], byteorder=sys.byteorder),
+                "Total entry size": int.from_bytes(self.mft_entry_raw_data[0x1C:0x20], byteorder=sys.byteorder),
+                "Base reference": int.from_bytes(self.mft_entry_raw_data[0x20:0x28], byteorder=sys.byteorder),
+            }  
+        except Exception as e:
+            self.current_mft_index_entry += 1
+            return 
+        
         # Nếu không phải là file thì skip
         if self.mft_entry_header["Signature"] != "FILE":
             self.current_mft_index_entry += 1
             return
-
+        
         # Đọc header của attribute $STANDARD INFORMATION
         self.current_offset += self.mft_entry_header["Offset to the first attribute"]
         self.drive.seek(self.current_offset)
@@ -141,6 +138,7 @@ class NTFS:
         # Đọc flag
         # Giữ lại current_offset làm offset bắt đầu từ header cho dễ tính toán
         current_standard_offset = self.current_offset + 16 + 4 # skip header và 4 byte kích thước nội dung
+        
         if self.mft_attribute_header["Flag"] == "Resident":
             # Lấy thông tin byte 20-21 để biết vị trí offset của data
             self.drive.seek(current_standard_offset)
@@ -155,7 +153,6 @@ class NTFS:
             self.mft_entry_raw_data = self.drive.read(8)
             timestamp = int.from_bytes(self.mft_entry_raw_data, byteorder=sys.byteorder)
             self.file_created_time = datetime.datetime(1601, 1, 1) + datetime.timedelta(microseconds=timestamp / 10)
-            
 
             # Lấy byte thứ 32 - 35 để biết giá trị cờ báo
             self.drive.seek(current_standard_offset + 32) # Seek 32 byte đầu
@@ -166,13 +163,16 @@ class NTFS:
             if self.mft_standard_flag not in ACCEPT_ATTRIBUTE_FLAG:
                 self.current_mft_index_entry += 1
                 return
+        else:
+            print("Non-resident")
+            self.current_mft_index_entry += 1
+            return 
 
         # ATTRIBUTE $FILE_NAME
         self.current_offset += self.mft_attribute_header["Attribute length"]
         self.drive.seek(self.current_offset)
         self.mft_entry_raw_data = self.drive.read(16)
         self.mft_attribute_header = self.__extract_mft_header__()
-
         # Seek tới info attribute của $FILE_NAME
         if self.mft_attribute_header["Flag"] == "Resident":
             self.current_offset += 16
@@ -203,33 +203,29 @@ class NTFS:
             # Ý tưởng ở đây là nếu các file không phải của hệ thống thì nó luôn có 1 parent folder,
             # và ta lưu các folder index vào valid_parent_id nếu nó là folder
             if self.mft_entry_data["PARENT ID"] in self.valid_parent_id:
-                self.dir_tree_data.append({
+                node = {
                     "PARENT ID": self.mft_entry_data["PARENT ID"],
                     "NAME": self.mft_entry_data["FILE NAME"],
                     "INDEX": self.current_mft_index_entry,
                     "TYPE": self.mft_standard_flag == 32 and "FILE" or "FOLDER",
                     "SECTOR OFFSET": begin_sector,
                     "CREATED TIME": self.file_created_time.strftime("%d/%m/%Y %H:%M:%S"),
-                })
+                }
+                self.dir_tree_data.append(node)
 
                 if self.mft_standard_flag == 0:
                     self.valid_parent_id.append(self.current_mft_index_entry)
-
+                
                 if "FILE" == (self.mft_standard_flag == 32 and "FILE" or "FOLDER"):
                     # Giữ lại file name để cuối hàm in ra màn hình
                     current_file_name = self.mft_entry_data["FILE NAME"]
 
-                    # Xử lý padding giữa $FILE_NAME và $OBJECT_ID
+                    # Seek tới attribute $DATA, bỏ qua các attribute khác
                     self.drive.seek(self.current_offset)
-                    while self.drive.read(2)[0] != 0x40:
+                    while self.drive.read(2)[0] != 0x80:
                         self.current_offset += 2
 
                     self.drive.seek(self.current_offset)
-                    ############################
-                    
-                    # $OBJECT_ID -> Ignore nó
-                    self.mft_entry_raw_data = self.drive.read(16)
-                    self.mft_attribute_header = self.__extract_mft_header__()
 
                     # Attribute $DATA
                     # $DATA HEADER
@@ -237,7 +233,6 @@ class NTFS:
                     self.drive.seek(self.current_offset)
                     self.mft_entry_raw_data = self.drive.read(16)
                     self.mft_attribute_header = self.__extract_mft_header__()
-                    
 
                     # Giữ lại offset bắt đầu phần DATA của attribute $DATA                    
                     current_data_offset = self.current_offset
@@ -253,18 +248,17 @@ class NTFS:
 
                     # Trở ngược về đầu phần DATA và đọc content
                     self.current_offset = current_data_offset + self.mft_entry_data["OFFSET TO CONTENT"]
+                    self.dir_tree_data[-1]["FILE_EXT"] = current_file_name.split(".")[-1]
                     self.drive.seek(self.current_offset)
 
-                    content = self.drive.read(self.mft_entry_data["SIZE OF CONTENT"])
-
-                    # Lưu content và extension file
-                    self.dir_tree_data[-1]["CONTENT_SIZE"] = len(content)
-                    self.dir_tree_data[-1]["FILE_EXT"] = current_file_name.split(".")[-1]
-
                     if current_file_name.split(".")[-1] == "txt":
+                        content = self.drive.read(self.mft_entry_data["SIZE OF CONTENT"])
+        
                         self.dir_tree_data[-1]["CONTENT"] = content
+                        self.dir_tree_data[-1]["CONTENT_SIZE"] = len(content)
                     else:
                         self.dir_tree_data[-1]["CONTENT"] = ""
+                    # Lưu content và extension file
         else:
             print("Non-resident")
         self.current_mft_index_entry += 1
@@ -292,12 +286,24 @@ class NTFS:
                 return key
         return "Unknown flags"
 
-    def __build_dir_tree__(self):
+    def __build_dir_tree__(self, inp_dir: dict = None) -> None:
+        for _ in range(self.boot_sector["Total Sector"]):
+            try:
+                self.__extract_mft__()
+            except Exception as e:
+                if str(e) == "Reach MFT end":
+                    break
+                else:
+                    pass
         # Xuất thông tin ổ đĩa
-        print("Directory tree:")
-        print(self.drive_name + ":")
+        if inp_dir == None:
+            print("Directory tree:")
+            print(self.drive_name + ":")
+            self.print_folder_tree(self.dir_tree_data, 5)
+        else: 
+            print(inp_dir["NAME"] + ":")
+            self.print_folder_tree(self.dir_tree_data, inp_dir["INDEX"])
         # Xuất thông tin thư mục
-        self.print_folder_tree(self.dir_tree_data, 5)
 
     def read_content_of_file(self, file_name: str):
         for item in self.dir_tree_data:
@@ -318,8 +324,8 @@ class NTFS:
             else:
                 print(indent + (elbow if is_last_child else tee) + name)
 
-    def print_raw_mft(self) -> None:
-        str_data = binascii.hexlify(self.raw_data).decode("utf-8")
+    def print_raw_mft(self, data = None) -> None:
+        str_data = binascii.hexlify(data if data != None else self.raw_data).decode("utf-8")
         
         # Print header
         print("offset ", end=" ")

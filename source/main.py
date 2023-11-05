@@ -1,5 +1,4 @@
 import argparse
-import os
 
 from core.NTFS import NTFS
 from core.FAT32 import FAT32
@@ -38,8 +37,8 @@ if (manager["volume"] != None):
             if (file == None):
                 print("File không tồn tại")
             
-            elif (file["TYPE"] != "FILE"):
-                print(file["NAME"], "Không phải là file")
+            elif (file["TYPE"] == "FOLDER"):
+                ntfs.__build_dir_tree__(file)
 
             elif (file["FILE_EXT"] != "txt"):
                 print("Chương trình không hỗ trợ đọc file có định dạng khác txt")
