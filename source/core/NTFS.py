@@ -69,6 +69,15 @@ class NTFS:
 
             if self.boot_sector["System ID"] != "NTFS":
                 return
+            
+            for _ in range(self.boot_sector["Total Sector"]):
+                try:
+                    self.__extract_mft__()
+                except Exception as e:
+                    if str(e) == "Reach MFT end":
+                        break
+                    else:
+                        pass
 
         except FileNotFoundError:
             print("Drive not found, please try another drive or use -l to list available volumes")
@@ -284,14 +293,7 @@ class NTFS:
         return "Unknown flags"
 
     def __build_dir_tree__(self, inp_dir: dict = None) -> None:
-        for _ in range(self.boot_sector["Total Sector"]):
-            try:
-                self.__extract_mft__()
-            except Exception as e:
-                if str(e) == "Reach MFT end":
-                    break
-                else:
-                    pass
+        
         # Xuất thông tin ổ đĩa
         if inp_dir == None:
             print("Directory tree:")
@@ -305,7 +307,6 @@ class NTFS:
     def read_content_of_file(self, file_name: str):
         for item in self.dir_tree_data:
             if item["NAME"] == file_name:
-                # return item["CONTENT"]
                 return item
         return None
 
